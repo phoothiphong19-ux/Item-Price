@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Teachable Machine Mobile — Light Theme</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.4"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Thai", sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+      overscroll-behavior-y: contain;
+    }
+    .hold-btn {
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .mirror-video {
+      transform: scaleX(-1);
+    }
+    .thumb-strip::-webkit-scrollbar {
+      height: 5px;
+    }
+    .thumb-strip::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900 pb-12">
+  <div class="max-w-xl mx-auto px-4 pt-4 space-y-4">
+
+    <!-- Header -->
+    <header class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between gap-3">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+          <h1 class="text-lg font-bold tracking-tight text-slate-900">Teachable Machine Mobile</h1>
+        </div>
+        <p id="statusText" class="text-xs text-slate-500 mt-0.5">กำลังโหลดโมเดล TensorFlow.js &amp; MobileNet...</p>
+      </div>
+      <span id="modelBadge" class="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+        กำลังเตรียมพร้อม
+      </span>
+    </header>
+
+    <!-- Camera & Live Prediction Card -->
+    <section class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="text-sm font-semibold text-slate-800">กล้องและผลทำนายแบบเรียลไทม์</h2>
+        <div class="flex items-center gap-2">
+          <button id="toggleCameraBtn" type="button"
+            class="text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition">
+            เปิด/ปิดกล้อง
+          </button>
+          <button id="flipCameraBtn" type="button"
+            class="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition">
+            สลับกล้อง
+          </button>
+        </div>
+      </div>
+
+      <div class="relative w-full aspect-[4/3] bg-slate-100 rounded-xl overflow-hidden border border-slate-200 flex items-center justify-center">
+        <video id="webcam" autoplay playsinline muted class="w-full h-full object-cover mirror-video hidden"></video>
+        <canvas id="captureCanvas" class="hidden"></canvas>
+
+        <div id="cameraPlaceholder" class="text-center px-4 space-y-2">
+          <p class="text-sm font-medium text-slate-600">ยังไม่ได้เปิดกล้อง</p>
+          <p id="cameraHint" class="text-xs text-slate-400">กด "เปิด/ปิดกล้อง" เพื่อเริ่มเก็บภาพ หรืออัปโหลดรูปภาพในแต่ละกลุ่มได้ทันที</p>
+        </div>
+
+        <div id="predictionBanner" class="hidden absolute bottom-3 left-3 right-3 bg-white/95 backdrop-blur border border-slate-200 shadow-md rounded-xl px-3.5 py-2.5 flex items-center justify-between">
+          <div>
+            <div class="text-[11px] uppercase tracking-wider font-semibold text-slate-400">ผลทำนายสูงสุด</div>
+            <div id="topLabel" class="text-base font-bold text-indigo-700">-</div>
+          </div>
+          <div id="topConfidence" class="text-xl font-extrabold text-slate-900">0%</div>
+        </div>
+      </div>
+
+      <!-- Confidence Bars -->
+      <div id="confidenceList" class="space-y-2 pt-1"></div>
+
+      <!-- Test With Uploaded Image -->
+      <div class="pt-2 border-t border-slate-100 flex items-center justify-between gap-3">
+        <label class="flex-1 cursor-pointer">
+          <input id="testImageInput" type="file" accept="image/*" class="hidden" />
+          <div class="w-full text-center text-xs font-semibold py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition">
+            ทดสอบด้วยรูปภาพจากเครื่อง
+          </div>
+        </label>
+        <button id="stopPredictBtn" type="button"
+          class="hidden text-xs font-semibold py-2.5 px-3.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition">
+          หยุดทำนายสด
+        </button>
+      </div>
+      <div id="testImagePreviewBox" class="hidden bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center gap-3">
+        <img id="testImagePreview" alt="ภาพทดสอบ" class="w-16 h-16 object-cover rounded-lg border border-slate-200 shrink-0" />
+        <div class="text-xs space-y-0.5 min-w-0">
+          <div class="font-semibold text-slate-800">ผลทดสอบจากรูปภาพ:</div>
+          <div id="testImageResult" class="text-indigo-700 font-bold truncate">-</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Classes Section -->
+    <section class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-slate-800">กลุ่มข้อมูลสำหรับฝึกสอน (Classes)</h2>
+        <button id="addClassBtn" type="button"
+          class="text-xs font-semibold px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition">
+          + เพิ่มกลุ่ม
+        </button>
+      </div>
+      <div id="classesContainer" class="space-y-3"></div>
+    </section>
+
+    <!-- Training & Save/Load Model Card -->
+    <section class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+      <h2 class="text-sm font-semibold text-slate-800">ฝึกสอน และบันทึก/โหลดโมเดล</h2>
+
+      <button id="trainBtn" type="button"
+        class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-sm shadow-sm transition">
+        ฝึกสอนโมเดลและเริ่มทำนาย
+      </button>
+
+      <div class="grid grid-cols-2 gap-2.5 pt-1">
+        <button id="saveBrowserBtn" type="button"
+          class="py-2.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-semibold transition">
+          บันทึกในเบราว์เซอร์
+        </button>
+        <button id="loadBrowserBtn" type="button"
+          class="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-semibold transition">
+          โหลดจากเบราว์เซอร์
+        </button>
+        <button id="exportJsonBtn" type="button"
+          class="py-2.5 px-3 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold transition">
+          ดาวน์โหลดไฟล์ (.json)
+        </button>
+        <label class="cursor-pointer">
+          <input id="importJsonInput" type="file" accept=".json,application/json" class="hidden" />
+          <div class="w-full text-center py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-semibold transition">
+            นำเข้าไฟล์ (.json)
+          </div>
+        </label>
+      </div>
+
+      <div class="flex items-center justify-between pt-1 border-t border-slate-100">
+        <span id="storageInfo" class="text-[11px] text-slate-500">ใช้ IndexedDB สำหรับเก็บภาพและโมเดลในเบราว์เซอร์</span>
+        <button id="clearSavedBtn" type="button"
+          class="text-[11px] font-medium text-rose-600 hover:text-rose-700 underline">
+          ล้างข้อมูลที่บันทึก
+        </button>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    const DB_NAME = 'TeachableMobileLightDB';
+    const DB_VERSION = 1;
+    const STORE_NAME = 'models';
+    const MODEL_RECORD_ID = 'active_model';
+
+    let mobilenetModel = null;
+    let classifier = null;
+    let isModelReady = false;
+    let isTrained = false;
+    let isPredicting = false;
+    let predictTimer = null;
+
+    let stream = null;
+    let facingMode = 'user';
+    let holdInterval = null;
+
+    let classes = [];
+    let classCounter = 0;
+
+    const els = {
+      statusText: document.getElementById('statusText'),
+      modelBadge: document.getElementById('modelBadge'),
+      toggleCameraBtn: document.getElementById('toggleCameraBtn'),
+      flipCameraBtn: document.getElementById('flipCameraBtn'),
+      webcam: document.getElementById('webcam'),
+      captureCanvas: document.getElementById('captureCanvas'),
+      cameraPlaceholder: document.getElementById('cameraPlaceholder'),
+      cameraHint: document.getElementById('cameraHint'),
+      predictionBanner: document.getElementById('predictionBanner'),
+      topLabel: document.getElementById('topLabel'),
+      topConfidence: document.getElementById('topConfidence'),
+      confidenceList: document.getElementById('confidenceList'),
+      testImageInput: document.getElementById('testImageInput'),
+      stopPredictBtn: document.getElementById('stopPredictBtn'),
+      testImagePreviewBox: document.getElementById('testImagePreviewBox'),
+      testImagePreview: document.getElementById('testImagePreview'),
+      testImageResult: document.getElementById('testImageResult'),
+      addClassBtn: document.getElementById('addClassBtn'),
+      classesContainer: document.getElementById('classesContainer'),
+      trainBtn: document.getElementById('trainBtn'),
+      saveBrowserBtn: document.getElementById('saveBrowserBtn'),
+      loadBrowserBtn: document.getElementById('loadBrowserBtn'),
+      exportJsonBtn: document.getElementById('exportJsonBtn'),
+      importJsonInput: document.getElementById('importJsonInput'),
+      clearSavedBtn: document.getElementById('clearSavedBtn'),
+      storageInfo: document.getElementById('storageInfo'),
+    };
+
+    function openDb() {
+      return new Promise((resolve, reject) => {
+        if (!('indexedDB' in window)) {
+          reject(new Error('เบราว์เซอร์ไม่รองรับ IndexedDB'));
+          return;
+        }
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = (ev) => {
+          const db = ev.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error || new Error('เปิด IndexedDB ไม่สำเร็จ'));
+      });
+    }
+
+    async function dbPutModel(payload) {
+      const db = await openDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        store.put({ id: MODEL_RECORD_ID, ...payload });
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error || new Error('บันทึกข้อมูลลง IndexedDB ไม่สำเร็จ'));
+      });
+    }
+
+    async function dbGetModel() {
+      const db = await openDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.get(MODEL_RECORD_ID);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error || new Error('อ่านข้อมูลจาก IndexedDB ไม่สำเร็จ'));
+      });
+    }
+
+    async function dbDeleteModel() {
+      const db = await openDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        store.delete(MODEL_RECORD_ID);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error || new Error('ลบข้อมูลจาก IndexedDB ไม่สำเร็จ'));
+      });
+    }
+
+    function setStatus(msg, isError = false) {
+      els.statusText.textContent = msg;
+      els.statusText.className = isError
+        ? 'text-xs text-rose-600 font-medium mt-0.5'
+        : 'text-xs text-slate-500 mt-0.5';
+    }
+
+    function updateBadge() {
+      if (!isModelReady) {
+        els.modelBadge.textContent = 'กำลังโหลด';
+        els.modelBadge.className = 'shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200';
+      } else if (isTrained) {
+        els.modelBadge.textContent = 'พร้อมทำนาย';
+        els.modelBadge.className = 'shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200';
+      } else {
+        els.modelBadge.textContent = 'พร้อมเก็บภาพ';
+        els.modelBadge.className = 'shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200';
+      }
+    }
+
+    function createClassItem(customName) {
+      classCounter += 1;
+      return {
+        id: `class_${Date.now()}_${classCounter}`,
+        name: customName || `กลุ่มที่ ${classCounter}`,
+        samples: []
+      };
+    }
+
+    function renderConfidenceBars(confidences = {}) {
+      els.confidenceList.innerHTML = '';
+      if (!classes.length) return;
+
+      classes.forEach((cls) => {
+        const pct = Math.round((confidences[cls.id] || 0) * 100);
+        const row = document.createElement('div');
+        row.className = 'space-y-1';
+        row.innerHTML = `
+          <div class="flex justify-between text-xs">
+            <span class="font-medium text-slate-700 truncate pr-2">${escapeHtml(cls.name)}</span>
+            <span class="font-semibold text-slate-900 shrink-0">${pct}%</span>
+          </div>
+          <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/70">
+            <div class="h-full bg-indigo-600 rounded-full transition-all duration-150" style="width: ${pct}%"></div>
+          </div>
+        `;
+        els.confidenceList.appendChild(row);
+      });
+    }
+
+    function renderClasses() {
+      els.classesContainer.innerHTML = '';
+
+      classes.forEach((cls, index) => {
+        const card = document.createElement('div');
+        card.className = 'bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3';
+
+        const thumbsHtml = cls.samples.length
+          ? cls.samples.map((s, sIdx) => `
+              <div class="relative shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-slate-200">
+                <img src="${s.dataUrl}" alt="ตัวอย่าง" class="w-full h-full object-cover" />
+                <button type="button" data-del-sample="${sIdx}" data-class-id="${cls.id}"
+                  aria-label="ลบรูป"
+                  class="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-slate-900/75 text-white text-[10px] leading-none flex items-center justify-center">
+                  ×
+                </button>
+              </div>
+            `).join('')
+          : `<div class="text-xs text-slate-400 py-3">ยังไม่มีภาพตัวอย่างในกลุ่มนี้</div>`;
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between gap-2">
+            <input type="text" value="${escapeHtml(cls.name)}" data-rename-id="${cls.id}"
+              class="flex-1 text-sm font-semibold text-slate-900 bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2 outline-none transition" />
+            <span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 shrink-0">
+              ${cls.samples.length} ภาพ
+            </span>
+            ${classes.length > 2 ? `
+              <button type="button" data-delete-class="${cls.id}"
+                class="text-xs font-medium px-2.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition">
+                ลบ
+              </button>
+            ` : ''}
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" data-hold-class="${cls.id}"
+              class="hold-btn py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-semibold shadow-sm transition">
+              กดค้างเพื่อถ่ายภาพ
+            </button>
+            <label class="cursor-pointer">
+              <input type="file" accept="image/*" multiple data-upload-class="${cls.id}" class="hidden" />
+              <div class="w-full text-center py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-semibold transition">
+                อัปโหลดรูปภาพ
+              </div>
+            </label>
+          </div>
+
+          <div class="thumb-strip flex items-center gap-2 overflow-x-auto pb-1">
+            ${thumbsHtml}
+          </div>
+        `;
+
+        els.classesContainer.appendChild(card);
+
+        const nameInput = card.querySelector(`[data-rename-id="${cls.id}"]`);
+        nameInput.addEventListener('input', (e) => {
+          cls.name = e.target.value.trim() || `กลุ่มที่ ${index + 1}`;
+          renderConfidenceBars();
+        });
+
+        const delClassBtn = card.querySelector(`[data-delete-class="${cls.id}"]`);
+        if (delClassBtn) {
+          delClassBtn.addEventListener('click', () => {
+            classes = classes.filter((c) => c.id !== cls.id);
+            isTrained = false;
+            stopLivePrediction();
+            renderClasses();
+            renderConfidenceBars();
+            updateBadge();
+            updateTrainButton();
+          });
+        }
+
+        const holdBtn = card.querySelector(`[data-hold-class="${cls.id}"]`);
+        const startHold = (e) => {
+          e.preventDefault();
+          if (!isModelReady) return setStatus('รอโมเดล MobileNet โหลดเสร็จก่อนครับ', true);
+          if (!stream) return setStatus('กรุณากด "เปิด/ปิดกล้อง" ก่อนถ่ายภาพครับ', true);
+          captureFrameToClass(cls);
+          clearInterval(holdInterval);
+          holdInterval = setInterval(() => captureFrameToClass(cls), 200);
+        };
+        const stopHold = () => {
+          if (holdInterval) {
+            clearInterval(holdInterval);
+            holdInterval = null;
+          }
+        };
+
+        holdBtn.addEventListener('pointerdown', startHold);
+        holdBtn.addEventListener('pointerup', stopHold);
+        holdBtn.addEventListener('pointerleave', stopHold);
+        holdBtn.addEventListener('pointercancel', stopHold);
+
+        const uploadInput = card.querySelector(`[data-upload-class="${cls.id}"]`);
+        uploadInput.addEventListener('change', async (e) => {
+          const files = Array.from(e.target.files || []);
+          if (!files.length) return;
+          if (!isModelReady) {
+            setStatus('รอโมเดล MobileNet โหลดเสร็จก่อนครับ', true);
+            return;
+          }
+          for (const file of files) {
+            await addImageFileToClass(cls, file);
+          }
+          uploadInput.value = '';
+          renderClasses();
+          updateTrainButton();
+        });
+
+        card.querySelectorAll(`[data-del-sample][data-class-id="${cls.id}"]`).forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const idx = Number(btn.getAttribute('data-del-sample'));
+            cls.samples.splice(idx, 1);
+            renderClasses();
+            updateTrainButton();
+          });
+        });
+      });
+
+      updateTrainButton();
+    }
+
+    function updateTrainButton() {
+      const classesWithData = classes.filter((c) => c.samples.length > 0).length;
+      els.trainBtn.disabled = !(isModelReady && classesWithData >= 2);
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    async function startCamera() {
+      stopCamera();
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus('เบราว์เซอร์นี้ไม่รองรับการเข้าถึงกล้อง', true);
+        return;
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode },
+          audio: false
+        });
+        els.webcam.srcObject = stream;
+        els.webcam.classList.remove('hidden');
+        els.webcam.classList.toggle('mirror-video', facingMode === 'user');
+        els.cameraPlaceholder.classList.add('hidden');
+        els.toggleCameraBtn.textContent = 'ปิดกล้อง';
+        setStatus(`เปิดกล้อง${facingMode === 'user' ? 'หน้า' : 'หลัง'}พร้อมใช้งานแล้ว`);
+        if (isTrained) {
+          startLivePrediction();
+        }
+      } catch (err) {
+        setStatus('ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบสิทธิ์กล้องหรือการเชื่อมต่อ HTTPS', true);
+        els.cameraHint.textContent = 'หากเปิดผ่านไฟล์ในเครื่องโดยตรง บางเบราว์เซอร์จะบล็อกกล้อง แนะนำให้เปิดผ่าน HTTPS หรือ Vercel';
+      }
+    }
+
+    function stopCamera() {
+      stopLivePrediction();
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+        stream = null;
+      }
+      els.webcam.srcObject = null;
+      els.webcam.classList.add('hidden');
+      els.cameraPlaceholder.classList.remove('hidden');
+      els.toggleCameraBtn.textContent = 'เปิด/ปิดกล้อง';
+    }
+
+    function captureDataUrlFromVideo(maxSize = 140) {
+      const vw = els.webcam.videoWidth || 640;
+      const vh = els.webcam.videoHeight || 480;
+      const scale = Math.min(maxSize / vw, maxSize / vh, 1);
+      const cw = Math.max(1, Math.round(vw * scale));
+      const ch = Math.max(1, Math.round(vh * scale));
+
+      els.captureCanvas.width = cw;
+      els.captureCanvas.height = ch;
+      const ctx = els.captureCanvas.getContext('2d');
+      if (facingMode === 'user') {
+        ctx.translate(cw, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(els.webcam, 0, 0, cw, ch);
+      return els.captureCanvas.toDataURL('image/jpeg', 0.7);
+    }
+
+    function extractEmbeddingFromElement(imgEl) {
+      return tf.tidy(() => {
+        const activation = mobilenetModel.infer(imgEl, true);
+        const data = Array.from(activation.dataSync());
+        const shape = activation.shape;
+        return { data, shape };
+      });
+    }
+
+    function captureFrameToClass(cls) {
+      if (!stream || !els.webcam.videoWidth) return;
+      const dataUrl = captureDataUrlFromVideo(140);
+      const emb = extractEmbeddingFromElement(els.webcam);
+      cls.samples.push({ dataUrl, embedding: emb });
+      renderClasses();
+      setStatus(`เก็บภาพเข้า "${cls.name}" แล้ว (${cls.samples.length} ภาพ)`);
+    }
+
+    function addImageFileToClass(cls, file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const maxSize = 140;
+            const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
+            canvas.width = Math.max(1, Math.round(img.width * scale));
+            canvas.height = Math.max(1, Math.round(img.height * scale));
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
+
+            const emb = extractEmbeddingFromElement(img);
+            cls.samples.push({ dataUrl, embedding: emb });
+            resolve();
+          };
+          img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function rebuildKnnFromClasses() {
+      if (classifier) {
+        classifier.dispose();
+      }
+      classifier = knnClassifier.create();
+
+      let added = 0;
+      classes.forEach((cls) => {
+        cls.samples.forEach((s) => {
+          if (s.embedding && Array.isArray(s.embedding.data) && Array.isArray(s.embedding.shape)) {
+            const tensor = tf.tensor(s.embedding.data, s.embedding.shape);
+            classifier.addExample(tensor, cls.id);
+            tensor.dispose();
+            added += 1;
+          }
+        });
+      });
+      return added;
+    }
+
+    async function trainModel() {
+      const total = rebuildKnnFromClasses();
+      if (total < 2) {
+        setStatus('ต้องมีภาพตัวอย่างอย่างน้อย 2 ภาพในอย่างน้อย 2 กลุ่มก่อนฝึกสอนครับ', true);
+        return false;
+      }
+      isTrained = true;
+      updateBadge();
+      renderConfidenceBars();
+      setStatus(`ฝึกสอนโมเดลเสร็จสมบูรณ์ (${total} ตัวอย่าง) พร้อมทำนายผลแล้ว!`);
+
+      if (stream) {
+        startLivePrediction();
+      }
+      return true;
+    }
+
+    function startLivePrediction() {
+      stopLivePrediction();
+      if (!isTrained || !stream || !classifier || classifier.getNumClasses() < 2) return;
+      isPredicting = true;
+      els.predictionBanner.classList.remove('hidden');
+      els.stopPredictBtn.classList.remove('hidden');
+
+      predictTimer = setInterval(async () => {
+        if (!isPredicting || !stream || els.webcam.readyState < 2) return;
+        try {
+          const activation = mobilenetModel.infer(els.webcam, true);
+          const result = await classifier.predictClass(activation, 5);
+          activation.dispose();
+          applyPredictionResult(result);
+        } catch (err) {
+          // ignore transient frame error
+        }
+      }, 220);
+    }
+
+    function stopLivePrediction() {
+      isPredicting = false;
+      if (predictTimer) {
+        clearInterval(predictTimer);
+        predictTimer = null;
+      }
+      els.predictionBanner.classList.add('hidden');
+      els.stopPredictBtn.classList.add('hidden');
+    }
+
+    function applyPredictionResult(result) {
+      if (!result || !result.confidences) return;
+      renderConfidenceBars(result.confidences);
+
+      const bestId = result.label;
+      const bestCls = classes.find((c) => c.id === bestId);
+      const bestPct = Math.round(((result.confidences && result.confidences[bestId]) || 0) * 100);
+
+      els.topLabel.textContent = bestCls ? bestCls.name : bestId;
+      els.topConfidence.textContent = `${bestPct}%`;
+    }
+
+    async function predictSingleImage(file) {
+      if (!isModelReady) {
+        setStatus('รอโมเดล MobileNet โหลดเสร็จก่อนครับ', true);
+        return;
+      }
+      if (!isTrained || !classifier || classifier.getNumClasses() < 2) {
+        setStatus('กรุณาฝึกสอนหรือโหลดโมเดลก่อนทดสอบด้วยรูปภาพครับ', true);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = async () => {
+          els.testImagePreview.src = ev.target.result;
+          els.testImagePreviewBox.classList.remove('hidden');
+
+          const activation = mobilenetModel.infer(img, true);
+          const result = await classifier.predictClass(activation, 5);
+          activation.dispose();
+
+          applyPredictionResult(result);
+          const bestCls = classes.find((c) => c.id === result.label);
+          const pct = Math.round(((result.confidences && result.confidences[result.label]) || 0) * 100);
+          els.testImageResult.textContent = `${bestCls ? bestCls.name : result.label} (${pct}%)`;
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function buildSerializablePayload() {
+      return {
+        version: 2,
+        savedAt: new Date().toISOString(),
+        classes: classes.map((c) => ({
+          id: c.id,
+          name: c.name,
+          samples: c.samples.map((s) => ({
+            dataUrl: s.dataUrl,
+            embedding: s.embedding
+          }))
+        }))
+      };
+    }
+
+    function applyPayload(payload) {
+      if (!payload || !Array.isArray(payload.classes) || payload.classes.length < 2) {
+        throw new Error('รูปแบบข้อมูลโมเดลไม่ถูกต้อง');
+      }
+      classes = payload.classes.map((c, idx) => ({
+        id: c.id || `class_loaded_${idx}_${Date.now()}`,
+        name: c.name || `กลุ่มที่ ${idx + 1}`,
+        samples: Array.isArray(c.samples) ? c.samples : []
+      }));
+      classCounter = Math.max(classCounter, classes.length);
+      renderClasses();
+      const added = rebuildKnnFromClasses();
+      if (added >= 2) {
+        isTrained = true;
+        updateBadge();
+        renderConfidenceBars();
+        setStatus(`โหลดโมเดลสำเร็จ (${added} ตัวอย่าง) พร้อมใช้งานแล้ว`);
+        if (stream) startLivePrediction();
+      } else {
+        isTrained = false;
+        updateBadge();
+        setStatus('โหลดรายชื่อกลุ่มสำเร็จ แต่ยังไม่มีภาพตัวอย่างเพียงพอ');
+      }
+    }
+
+    async function saveToBrowser(silent = false) {
+      try {
+        const payload = buildSerializablePayload();
+        await dbPutModel(payload);
+        await refreshStorageInfo();
+        if (!silent) {
+          setStatus('บันทึกภาพและโมเดลลงในเบราว์เซอร์ (IndexedDB) เรียบร้อยแล้ว');
+        }
+        return true;
+      } catch (err) {
+        setStatus(`บันทึกในเบราว์เซอร์ไม่สำเร็จ: ${err.message || 'พื้นที่เต็มหรือเบราว์เซอร์บล็อก'}`, true);
+        return false;
+      }
+    }
+
+    async function loadFromBrowser(silent = false) {
+      try {
+        const record = await dbGetModel();
+        if (!record) {
+          if (!silent) setStatus('ยังไม่มีโมเดลที่บันทึกไว้ในเบราว์เซอร์นี้', true);
+          return false;
+        }
+        applyPayload(record);
+        await refreshStorageInfo();
+        if (!silent) setStatus('โหลดโมเดลจากเบราว์เซอร์เรียบร้อยแล้ว');
+        return true;
+      } catch (err) {
+        if (!silent) setStatus(`ไม่สามารถโหลดโมเดลจากเบราว์เซอร์ได้: ${err.message || ''}`, true);
+        return false;
+      }
+    }
+
+    function exportToJsonFile() {
+      const payload = buildSerializablePayload();
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      a.href = url;
+      a.download = `teachable-model-${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setStatus('ดาวน์โหลดไฟล์โมเดล (.json) เรียบร้อยแล้ว');
+    }
+
+    async function refreshStorageInfo() {
+      try {
+        const record = await dbGetModel();
+        if (!record) {
+          els.storageInfo.textContent = 'ยังไม่มีข้อมูลที่บันทึกในเบราว์เซอร์ (IndexedDB)';
+          return;
+        }
+        const totalSamples = (record.classes || []).reduce((sum, c) => sum + ((c.samples && c.samples.length) || 0), 0);
+        const approxBytes = new Blob([JSON.stringify(record)]).size;
+        const sizeLabel = approxBytes >= 1024 * 1024
+          ? `${(approxBytes / (1024 * 1024)).toFixed(2)} MB`
+          : `${(approxBytes / 1024).toFixed(1)} KB`;
+        els.storageInfo.textContent = `บันทึกแล้ว (${totalSamples} ภาพ • ${sizeLabel})`;
+      } catch (err) {
+        els.storageInfo.textContent = 'ไม่สามารถตรวจสอบพื้นที่จัดเก็บได้';
+      }
+    }
+
+    function bindGlobalEvents() {
+      els.toggleCameraBtn.addEventListener('click', () => {
+        if (stream) {
+          stopCamera();
+          setStatus('ปิดกล้องแล้ว');
+        } else {
+          startCamera();
+        }
+      });
+
+      els.flipCameraBtn.addEventListener('click', async () => {
+        facingMode = facingMode === 'user' ? 'environment' : 'user';
+        if (stream) {
+          await startCamera();
+        } else {
+          setStatus(`ตั้งค่ากล้องเป็น${facingMode === 'user' ? 'กล้องหน้า' : 'กล้องหลัง'}แล้ว`);
+        }
+      });
+
+      els.stopPredictBtn.addEventListener('click', () => {
+        stopLivePrediction();
+        setStatus('หยุดการทำนายแบบเรียลไทม์แล้ว');
+      });
+
+      els.testImageInput.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (file) {
+          predictSingleImage(file);
+        }
+        e.target.value = '';
+      });
+
+      els.addClassBtn.addEventListener('click', () => {
+        classes.push(createClassItem());
+        renderClasses();
+        renderConfidenceBars();
+      });
+
+      els.trainBtn.addEventListener('click', async () => {
+        const ok = await trainModel();
+        if (ok) {
+          await saveToBrowser(true);
+        }
+      });
+
+      els.saveBrowserBtn.addEventListener('click', () => saveToBrowser(false));
+      els.loadBrowserBtn.addEventListener('click', () => loadFromBrowser(false));
+      els.exportJsonBtn.addEventListener('click', exportToJsonFile);
+
+      els.importJsonInput.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+          try {
+            const parsed = JSON.parse(ev.target.result);
+            applyPayload(parsed);
+            await saveToBrowser(true);
+          } catch (err) {
+            setStatus('ไฟล์ .json ไม่ถูกต้องหรือเสียหาย', true);
+          }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+      });
+
+      els.clearSavedBtn.addEventListener('click', async () => {
+        try {
+          await dbDeleteModel();
+          await refreshStorageInfo();
+          setStatus('ล้างข้อมูลโมเดลที่บันทึกในเบราว์เซอร์เรียบร้อยแล้ว');
+        } catch (err) {
+          setStatus('ล้างข้อมูลไม่สำเร็จ', true);
+        }
+      });
+    }
+
+    async function init() {
+      classes = [createClassItem('กลุ่มที่ 1'), createClassItem('กลุ่มที่ 2')];
+      bindGlobalEvents();
+      renderClasses();
+      renderConfidenceBars();
+      updateBadge();
+
+      // Try loading saved model from IndexedDB right away
+      const restored = await loadFromBrowser(true);
+
+      try {
+        await tf.ready();
+        mobilenetModel = await mobilenet.load({ version: 2, alpha: 1.0 });
+        if (!isTrained) {
+          classifier = knnClassifier.create();
+        }
+        isModelReady = true;
+        updateBadge();
+        updateTrainButton();
+        if (restored && isTrained) {
+          setStatus('กู้คืนภาพและโมเดลที่บันทึกไว้เรียบร้อย พร้อมใช้งานแล้ว!');
+        } else {
+          setStatus('พร้อมใช้งาน! เปิดกล้องหรืออัปโหลดภาพเพื่อเริ่มเก็บข้อมูลได้เลย');
+        }
+      } catch (err) {
+        setStatus('โหลดโมเดล TensorFlow.js / MobileNet ไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต', true);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
