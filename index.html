@@ -140,7 +140,7 @@
         </div>
       </div>
 
-      <!-- Confidence Bars -->
+      <!-- Top 3 Confidence Bars -->
       <div id="confidenceList" class="space-y-2 pt-1"></div>
 
       <!-- Test With Uploaded Image -->
@@ -165,19 +165,7 @@
       </div>
     </section>
 
-    <!-- Classes Section -->
-    <section class="space-y-3">
-      <div class="flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-slate-800">กลุ่มข้อมูลสำหรับฝึกสอน (Classes)</h2>
-        <button id="addClassBtn" type="button"
-          class="text-xs font-semibold px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition">
-          + เพิ่มกลุ่ม
-        </button>
-      </div>
-      <div id="classesContainer" class="space-y-3"></div>
-    </section>
-
-    <!-- Training & Save/Load Model Card -->
+    <!-- Training & Save/Load Model Card (Placed above classes for quick access) -->
     <section class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
       <h2 class="text-sm font-semibold text-slate-800">ฝึกสอน และบันทึก/โหลดโมเดล</h2>
 
@@ -238,6 +226,36 @@
       </div>
     </section>
 
+    <!-- Classes Section (Compact, Searchable & Collapsible) -->
+    <section class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <h2 class="text-sm font-semibold text-slate-800">กลุ่มข้อมูลสำหรับฝึกสอน (<span id="classTotalCount">0</span>)</h2>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button id="toggleCollapseAllBtn" type="button"
+            class="text-xs font-medium px-2.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition">
+            ย่อ/ขยายทั้งหมด
+          </button>
+          <button id="addClassBtn" type="button"
+            class="text-xs font-semibold px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition">
+            + เพิ่มกลุ่ม
+          </button>
+        </div>
+      </div>
+
+      <div class="relative flex items-center">
+        <input id="classFilterInput" type="search" placeholder="ค้นหากลุ่มในรายการฝึกสอน..."
+          class="w-full text-xs text-slate-900 bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-3 pr-14 py-2 outline-none transition" />
+        <button id="clearClassFilterBtn" type="button"
+          class="hidden absolute right-2 text-[11px] font-medium text-slate-500 hover:text-slate-800 px-2 py-0.5 rounded bg-slate-100">
+          ล้าง
+        </button>
+      </div>
+
+      <div id="classesContainer" class="thin-scroll max-h-[420px] overflow-y-auto space-y-2 pr-0.5"></div>
+    </section>
+
   </div>
 
   <script>
@@ -263,6 +281,7 @@
     let capturedQueue = [];
     let classes = [];
     let classCounter = 0;
+    let collapseAllState = false;
 
     const els = {
       statusText: document.getElementById('statusText'),
@@ -291,6 +310,10 @@
       testImagePreviewBox: document.getElementById('testImagePreviewBox'),
       testImagePreview: document.getElementById('testImagePreview'),
       testImageResult: document.getElementById('testImageResult'),
+      classTotalCount: document.getElementById('classTotalCount'),
+      toggleCollapseAllBtn: document.getElementById('toggleCollapseAllBtn'),
+      classFilterInput: document.getElementById('classFilterInput'),
+      clearClassFilterBtn: document.getElementById('clearClassFilterBtn'),
       addClassBtn: document.getElementById('addClassBtn'),
       classesContainer: document.getElementById('classesContainer'),
       trainBtn: document.getElementById('trainBtn'),
@@ -391,7 +414,8 @@
       return {
         id: `class_${Date.now()}_${classCounter}`,
         name: customName || `กลุ่มที่ ${classCounter}`,
-        samples: []
+        samples: [],
+        collapsed: collapseAllState
       };
     }
 
@@ -494,17 +518,30 @@
       els.confidenceList.innerHTML = '';
       if (!classes.length) return;
 
-      classes.forEach((cls) => {
-        const pct = Math.round((confidences[cls.id] || 0) * 100);
+      const ranked = classes
+        .map((cls, idx) => ({
+          cls,
+          idx,
+          score: Number(confidences[cls.id] || 0)
+        }))
+        .sort((a, b) => (b.score - a.score) || (a.idx - b.idx))
+        .slice(0, 3);
+
+      ranked.forEach(({ cls, score }, rankIndex) => {
+        const pct = Math.round(score * 100);
+        const barColor = rankIndex === 0 ? 'bg-indigo-600' : 'bg-indigo-400';
         const row = document.createElement('div');
         row.className = 'space-y-1';
         row.innerHTML = `
           <div class="flex justify-between text-xs">
-            <span class="font-medium text-slate-700 truncate pr-2">${escapeHtml(cls.name)}</span>
+            <span class="font-medium text-slate-700 truncate pr-2">
+              <span class="text-[11px] font-bold text-slate-400 mr-1">#${rankIndex + 1}</span>
+              ${escapeHtml(cls.name)}
+            </span>
             <span class="font-semibold text-slate-900 shrink-0">${pct}%</span>
           </div>
           <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/70">
-            <div class="h-full bg-indigo-600 rounded-full transition-all duration-150" style="width: ${pct}%"></div>
+            <div class="h-full ${barColor} rounded-full transition-all duration-150" style="width: ${pct}%"></div>
           </div>
         `;
         els.confidenceList.appendChild(row);
@@ -512,15 +549,37 @@
     }
 
     function renderClasses() {
+      els.classTotalCount.textContent = String(classes.length);
+      const filterText = (els.classFilterInput.value || '').trim().toLowerCase();
+      els.clearClassFilterBtn.classList.toggle('hidden', filterText.length === 0);
+
+      const visibleClasses = filterText
+        ? classes.filter((c) => c.name.toLowerCase().includes(filterText))
+        : classes;
+
       els.classesContainer.innerHTML = '';
 
-      classes.forEach((cls, index) => {
+      if (!visibleClasses.length) {
+        els.classesContainer.innerHTML = `
+          <div class="text-xs text-slate-400 text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+            ไม่พบกลุ่มที่ตรงกับ "${escapeHtml(els.classFilterInput.value)}"
+          </div>
+        `;
+        renderAssignClassSearchResults();
+        updateTrainButton();
+        return;
+      }
+
+      visibleClasses.forEach((cls) => {
+        const realIndex = classes.findIndex((c) => c.id === cls.id);
+        const isCollapsed = Boolean(cls.collapsed);
+
         const card = document.createElement('div');
-        card.className = 'bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3';
+        card.className = 'bg-slate-50/80 border border-slate-200 rounded-xl p-3 space-y-2.5';
 
         const thumbsHtml = cls.samples.length
           ? cls.samples.map((s, sIdx) => `
-              <div class="relative shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-slate-200">
+              <div class="relative shrink-0 w-12 h-12 rounded-lg overflow-hidden border border-slate-200 bg-white">
                 <img src="${s.dataUrl}" alt="ตัวอย่าง" class="w-full h-full object-cover" />
                 <button type="button" data-del-sample="${sIdx}" data-class-id="${cls.id}"
                   aria-label="ลบรูป"
@@ -529,43 +588,55 @@
                 </button>
               </div>
             `).join('')
-          : `<div class="text-xs text-slate-400 py-2">ยังไม่มีภาพตัวอย่างในกลุ่มนี้</div>`;
+          : `<div class="text-[11px] text-slate-400 py-1.5">ยังไม่มีภาพตัวอย่างในกลุ่มนี้</div>`;
 
         card.innerHTML = `
-          <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5">
+            <button type="button" data-toggle-card="${cls.id}" aria-label="ย่อหรือขยายกลุ่ม"
+              class="shrink-0 w-7 h-8 rounded-lg bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 text-xs font-bold flex items-center justify-center transition">
+              ${isCollapsed ? '+' : '−'}
+            </button>
             <input type="text" value="${escapeHtml(cls.name)}" data-rename-id="${cls.id}"
-              class="flex-1 text-sm font-semibold text-slate-900 bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2 outline-none transition" />
-            <span class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 shrink-0">
+              class="flex-1 min-w-0 text-xs sm:text-sm font-semibold text-slate-900 bg-white focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-lg px-2.5 py-1.5 outline-none transition" />
+            <span class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-white text-slate-700 border border-slate-200 shrink-0">
               ${cls.samples.length} ภาพ
             </span>
             ${classes.length > 2 ? `
               <button type="button" data-delete-class="${cls.id}"
-                class="text-xs font-medium px-2.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition">
+                class="text-[11px] font-medium px-2 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition shrink-0">
                 ลบ
               </button>
             ` : ''}
           </div>
 
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-[11px] text-slate-500">ถ่ายจากกล้องด้านบนแล้วค้นหากลุ่มเพื่อเพิ่มรูป หรืออัปโหลดไฟล์:</span>
-            <label class="cursor-pointer shrink-0">
-              <input type="file" accept="image/*" multiple data-upload-class="${cls.id}" class="hidden" />
-              <div class="text-center py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-semibold transition">
-                อัปโหลดรูปภาพ
-              </div>
-            </label>
-          </div>
+          <div data-card-body="${cls.id}" class="${isCollapsed ? 'hidden' : 'space-y-2 pt-1 border-t border-slate-200/70'}">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[11px] text-slate-500 truncate">อัปโหลดเพิ่มหรือดูรูปในกลุ่ม:</span>
+              <label class="cursor-pointer shrink-0">
+                <input type="file" accept="image/*" multiple data-upload-class="${cls.id}" class="hidden" />
+                <div class="text-center py-1.5 px-2.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-semibold transition">
+                  อัปโหลดรูปภาพ
+                </div>
+              </label>
+            </div>
 
-          <div class="thumb-strip flex items-center gap-2 overflow-x-auto pb-1">
-            ${thumbsHtml}
+            <div class="thumb-strip flex items-center gap-1.5 overflow-x-auto pb-0.5">
+              ${thumbsHtml}
+            </div>
           </div>
         `;
 
         els.classesContainer.appendChild(card);
 
+        const toggleBtn = card.querySelector(`[data-toggle-card="${cls.id}"]`);
+        toggleBtn.addEventListener('click', () => {
+          cls.collapsed = !cls.collapsed;
+          renderClasses();
+        });
+
         const nameInput = card.querySelector(`[data-rename-id="${cls.id}"]`);
         nameInput.addEventListener('input', (e) => {
-          cls.name = e.target.value.trim() || `กลุ่มที่ ${index + 1}`;
+          cls.name = e.target.value.trim() || `กลุ่มที่ ${(realIndex >= 0 ? realIndex : 0) + 1}`;
           renderConfidenceBars();
           renderAssignClassSearchResults();
         });
@@ -859,7 +930,8 @@
       classes = payload.classes.map((c, idx) => ({
         id: c.id || `class_loaded_${idx}_${Date.now()}`,
         name: c.name || `กลุ่มที่ ${idx + 1}`,
-        samples: Array.isArray(c.samples) ? c.samples : []
+        samples: Array.isArray(c.samples) ? c.samples : [],
+        collapsed: classes.length > 4
       }));
       classCounter = Math.max(classCounter, classes.length);
       renderClasses();
@@ -1024,6 +1096,24 @@
         els.assignSearchInput.value = '';
         renderAssignClassSearchResults();
         els.assignSearchInput.focus();
+      });
+
+      els.classFilterInput.addEventListener('input', () => {
+        renderClasses();
+      });
+
+      els.clearClassFilterBtn.addEventListener('click', () => {
+        els.classFilterInput.value = '';
+        renderClasses();
+        els.classFilterInput.focus();
+      });
+
+      els.toggleCollapseAllBtn.addEventListener('click', () => {
+        collapseAllState = !collapseAllState;
+        classes.forEach((c) => {
+          c.collapsed = collapseAllState;
+        });
+        renderClasses();
       });
 
       els.stopPredictBtn.addEventListener('click', () => {
