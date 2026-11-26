@@ -133,7 +133,29 @@
         ฝึกสอนโมเดลและเริ่มทำนาย
       </button>
 
-      <div class="grid grid-cols-2 gap-2.5 pt-1">
+      <!-- Auto-Load From URL -->
+      <div class="pt-2 border-t border-slate-100 space-y-2">
+        <label for="modelUrlInput" class="block text-xs font-semibold text-slate-700">
+          URL ไฟล์โมเดล (.json) สำหรับโหลดอัตโนมัติตอนเปิดเว็บ
+        </label>
+        <div class="flex gap-2">
+          <input id="modelUrlInput" type="url" placeholder="https://example.com/model.json หรือ ./model.json"
+            class="flex-1 text-xs text-slate-900 bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2 outline-none transition" />
+          <button id="saveAndLoadUrlBtn" type="button"
+            class="shrink-0 text-xs font-semibold px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition">
+            บันทึก URL และโหลด
+          </button>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] text-slate-400">หากตั้งค่าไว้ ระบบจะดึงโมเดลจากลิงก์นี้ให้อัตโนมัติเมื่อเปิดหน้าเว็บ</span>
+          <button id="clearUrlBtn" type="button"
+            class="text-[11px] font-medium text-slate-500 hover:text-rose-600 underline shrink-0 ml-2">
+            ล้าง URL
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2.5 pt-2 border-t border-slate-100">
         <button id="saveBrowserBtn" type="button"
           class="py-2.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-semibold transition">
           บันทึกในเบราว์เซอร์
@@ -166,6 +188,10 @@
   </div>
 
   <script>
+    // ตั้งค่า URL เริ่มต้นของไฟล์ .json ที่นี่หากต้องการให้ทุกเครื่องโหลดอัตโนมัติ (เว้นว่าง '' หากไม่ใช้)
+    const DEFAULT_MODEL_URL = '';
+    const MODEL_URL_STORAGE_KEY = 'teachable_mobile_model_url_v1';
+
     const DB_NAME = 'TeachableMobileLightDB';
     const DB_VERSION = 1;
     const STORE_NAME = 'models';
@@ -206,6 +232,9 @@
       addClassBtn: document.getElementById('addClassBtn'),
       classesContainer: document.getElementById('classesContainer'),
       trainBtn: document.getElementById('trainBtn'),
+      modelUrlInput: document.getElementById('modelUrlInput'),
+      saveAndLoadUrlBtn: document.getElementById('saveAndLoadUrlBtn'),
+      clearUrlBtn: document.getElementById('clearUrlBtn'),
       saveBrowserBtn: document.getElementById('saveBrowserBtn'),
       loadBrowserBtn: document.getElementById('loadBrowserBtn'),
       exportJsonBtn: document.getElementById('exportJsonBtn'),
@@ -213,6 +242,18 @@
       clearSavedBtn: document.getElementById('clearSavedBtn'),
       storageInfo: document.getElementById('storageInfo'),
     };
+
+    function getActiveModelUrl() {
+      try {
+        const savedUrl = localStorage.getItem(MODEL_URL_STORAGE_KEY);
+        if (savedUrl !== null && savedUrl.trim() !== '') {
+          return savedUrl.trim();
+        }
+      } catch (e) {
+        // ignore storage access issues
+      }
+      return (DEFAULT_MODEL_URL || '').trim();
+    }
 
     function openDb() {
       return new Promise((resolve, reject) => {
@@ -701,6 +742,31 @@
       }
     }
 
+    async function loadModelFromUrl(url, silent = false) {
+      const targetUrl = (url || '').trim();
+      if (!targetUrl) {
+        if (!silent) setStatus('กรุณากรอก URL ของไฟล์โมเดล (.json) ก่อนครับ', true);
+        return false;
+      }
+      try {
+        if (!silent) setStatus('กำลังดาวน์โหลดโมเดลจาก URL...');
+        const response = await fetch(targetUrl, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const parsed = await response.json();
+        applyPayload(parsed);
+        await saveToBrowser(true);
+        if (!silent) setStatus('โหลดโมเดลจาก URL สำเร็จและพร้อมใช้งานแล้ว!');
+        return true;
+      } catch (err) {
+        if (!silent) {
+          setStatus(`โหลดโมเดลจาก URL ไม่สำเร็จ: ${err.message || 'ตรวจสอบลิงก์หรือ CORS'}`, true);
+        }
+        return false;
+      }
+    }
+
     async function saveToBrowser(silent = false) {
       try {
         const payload = buildSerializablePayload();
@@ -811,6 +877,30 @@
         }
       });
 
+      els.saveAndLoadUrlBtn.addEventListener('click', async () => {
+        const val = (els.modelUrlInput.value || '').trim();
+        try {
+          if (val) {
+            localStorage.setItem(MODEL_URL_STORAGE_KEY, val);
+          } else {
+            localStorage.removeItem(MODEL_URL_STORAGE_KEY);
+          }
+        } catch (e) {}
+        if (!isModelReady) {
+          setStatus('กำลังโหลด MobileNet อยู่ รอสักครู่แล้วค่อยโหลดโมเดลครับ', true);
+          return;
+        }
+        await loadModelFromUrl(val, false);
+      });
+
+      els.clearUrlBtn.addEventListener('click', () => {
+        els.modelUrlInput.value = '';
+        try {
+          localStorage.removeItem(MODEL_URL_STORAGE_KEY);
+        } catch (e) {}
+        setStatus('ล้าง URL โมเดลอัตโนมัติเรียบร้อยแล้ว');
+      });
+
       els.saveBrowserBtn.addEventListener('click', () => saveToBrowser(false));
       els.loadBrowserBtn.addEventListener('click', () => loadFromBrowser(false));
       els.exportJsonBtn.addEventListener('click', exportToJsonFile);
@@ -850,8 +940,15 @@
       renderConfidenceBars();
       updateBadge();
 
-      // Try loading saved model from IndexedDB right away
-      const restored = await loadFromBrowser(true);
+      const activeUrl = getActiveModelUrl();
+      if (activeUrl) {
+        els.modelUrlInput.value = activeUrl;
+      }
+
+      let restoredFromLocal = false;
+      if (!activeUrl) {
+        restoredFromLocal = await loadFromBrowser(true);
+      }
 
       try {
         await tf.ready();
@@ -862,7 +959,17 @@
         isModelReady = true;
         updateBadge();
         updateTrainButton();
-        if (restored && isTrained) {
+
+        if (activeUrl) {
+          const loadedRemote = await loadModelFromUrl(activeUrl, true);
+          if (loadedRemote && isTrained) {
+            setStatus('โหลดโมเดลจาก URL อัตโนมัติสำเร็จ พร้อมใช้งานแล้ว!');
+            return;
+          }
+          restoredFromLocal = await loadFromBrowser(true);
+        }
+
+        if (restoredFromLocal && isTrained) {
           setStatus('กู้คืนภาพและโมเดลที่บันทึกไว้เรียบร้อย พร้อมใช้งานแล้ว!');
         } else {
           setStatus('พร้อมใช้งาน! เปิดกล้องหรืออัปโหลดภาพเพื่อเริ่มเก็บข้อมูลได้เลย');
