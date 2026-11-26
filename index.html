@@ -27,10 +27,13 @@
     .mirror-video {
       transform: scaleX(-1);
     }
-    .thumb-strip::-webkit-scrollbar {
+    .thumb-strip::-webkit-scrollbar,
+    .thin-scroll::-webkit-scrollbar {
       height: 5px;
+      width: 5px;
     }
-    .thumb-strip::-webkit-scrollbar-thumb {
+    .thumb-strip::-webkit-scrollbar-thumb,
+    .thin-scroll::-webkit-scrollbar-thumb {
       background: #cbd5e1;
       border-radius: 9999px;
     }
@@ -99,7 +102,7 @@
         </button>
       </div>
 
-      <!-- Captured Photos Tray -->
+      <!-- Captured Photos Tray + Searchable Class Picker -->
       <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5">
         <div class="flex items-center justify-between gap-2">
           <div class="text-xs font-semibold text-slate-800">
@@ -115,9 +118,25 @@
           <div class="text-xs text-slate-400">ยังไม่มีรูปที่ถ่ายจากกล้อง — กด "ถ่ายภาพ" หรือ "กดค้างถ่ายต่อเนื่อง" ด้านบน</div>
         </div>
 
-        <div class="space-y-1.5 pt-1 border-t border-slate-200/80">
-          <div class="text-[11px] font-medium text-slate-600">กดเลือกกลุ่มเพื่อส่งรูปที่ถ่ายทั้งหมดเข้ากลุ่มนั้น:</div>
-          <div id="assignClassButtons" class="flex flex-wrap gap-1.5"></div>
+        <!-- Search & Assign to Class -->
+        <div class="space-y-2 pt-2 border-t border-slate-200/80">
+          <div class="flex items-center justify-between gap-2">
+            <label for="assignSearchInput" class="text-[11px] font-semibold text-slate-700">
+              ค้นหาชื่อกลุ่มเพื่อเพิ่มรูปที่ถ่ายทั้งหมดเข้ากลุ่ม:
+            </label>
+            <span id="assignMatchCount" class="text-[11px] text-slate-400"></span>
+          </div>
+
+          <div class="relative flex items-center">
+            <input id="assignSearchInput" type="search" placeholder="พิมพ์ชื่อกลุ่มหรือราคาที่ต้องการค้นหา..."
+              class="w-full text-xs text-slate-900 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-3 pr-14 py-2 outline-none transition" />
+            <button id="clearAssignSearchBtn" type="button"
+              class="hidden absolute right-2 text-[11px] font-medium text-slate-500 hover:text-slate-800 px-2 py-0.5 rounded bg-slate-100">
+              ล้าง
+            </button>
+          </div>
+
+          <div id="assignClassResults" class="thin-scroll max-h-40 overflow-y-auto space-y-1.5 pr-0.5"></div>
         </div>
       </div>
 
@@ -241,9 +260,7 @@
     let facingMode = 'user';
     let holdInterval = null;
 
-    // Temporary photos captured from camera waiting to be assigned to a class
-    let capturedQueue = []; // [{ dataUrl, embedding }]
-
+    let capturedQueue = [];
     let classes = [];
     let classCounter = 0;
 
@@ -264,7 +281,10 @@
       capturedCount: document.getElementById('capturedCount'),
       clearCapturedBtn: document.getElementById('clearCapturedBtn'),
       capturedTray: document.getElementById('capturedTray'),
-      assignClassButtons: document.getElementById('assignClassButtons'),
+      assignSearchInput: document.getElementById('assignSearchInput'),
+      clearAssignSearchBtn: document.getElementById('clearAssignSearchBtn'),
+      assignMatchCount: document.getElementById('assignMatchCount'),
+      assignClassResults: document.getElementById('assignClassResults'),
       confidenceList: document.getElementById('confidenceList'),
       testImageInput: document.getElementById('testImageInput'),
       stopPredictBtn: document.getElementById('stopPredictBtn'),
@@ -408,20 +428,52 @@
         });
       }
 
-      renderAssignClassButtons();
+      renderAssignClassSearchResults();
     }
 
-    function renderAssignClassButtons() {
-      els.assignClassButtons.innerHTML = '';
+    function renderAssignClassSearchResults() {
+      const keyword = (els.assignSearchInput.value || '').trim().toLowerCase();
+      els.clearAssignSearchBtn.classList.toggle('hidden', keyword.length === 0);
+
+      const filtered = keyword
+        ? classes.filter((c) => c.name.toLowerCase().includes(keyword))
+        : classes;
+
+      els.assignMatchCount.textContent = keyword
+        ? `พบ ${filtered.length}/${classes.length} กลุ่ม`
+        : `ทั้งหมด ${classes.length} กลุ่ม`;
+
+      els.assignClassResults.innerHTML = '';
+
+      if (!filtered.length) {
+        els.assignClassResults.innerHTML = `
+          <div class="text-xs text-slate-400 text-center py-3 bg-white rounded-xl border border-dashed border-slate-200">
+            ไม่พบชื่อกลุ่มที่ตรงกับ "${escapeHtml(els.assignSearchInput.value)}"
+          </div>
+        `;
+        return;
+      }
+
       const hasPhotos = capturedQueue.length > 0;
 
-      classes.forEach((cls) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.disabled = !hasPhotos;
-        btn.className = 'text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white transition';
-        btn.textContent = `ใส่กลุ่ม "${cls.name}"`;
-        btn.addEventListener('click', () => {
+      filtered.forEach((cls) => {
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2';
+
+        const info = document.createElement('div');
+        info.className = 'min-w-0 flex-1';
+        info.innerHTML = `
+          <div class="text-xs font-semibold text-slate-800 truncate">${escapeHtml(cls.name)}</div>
+          <div class="text-[11px] text-slate-400">มีอยู่แล้ว ${cls.samples.length} ภาพ</div>
+        `;
+
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.disabled = !hasPhotos;
+        addBtn.className = 'shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white transition';
+        addBtn.textContent = hasPhotos ? `+ ใส่ ${capturedQueue.length} รูป` : 'เลือกกลุ่ม';
+
+        addBtn.addEventListener('click', () => {
           if (!capturedQueue.length) return;
           const countToMove = capturedQueue.length;
           cls.samples.push(...capturedQueue);
@@ -431,7 +483,10 @@
           updateTrainButton();
           setStatus(`ย้ายรูปที่ถ่าย ${countToMove} รูปเข้ากลุ่ม "${cls.name}" แล้ว (${cls.samples.length} ภาพในกลุ่ม)`);
         });
-        els.assignClassButtons.appendChild(btn);
+
+        row.appendChild(info);
+        row.appendChild(addBtn);
+        els.assignClassResults.appendChild(row);
       });
     }
 
@@ -492,7 +547,7 @@
           </div>
 
           <div class="flex items-center justify-between gap-2">
-            <span class="text-[11px] text-slate-500">ถ่ายจากกล้องด้านบนแล้วกดใส่กลุ่มนี้ หรืออัปโหลดไฟล์รูปภาพ:</span>
+            <span class="text-[11px] text-slate-500">ถ่ายจากกล้องด้านบนแล้วค้นหากลุ่มเพื่อเพิ่มรูป หรืออัปโหลดไฟล์:</span>
             <label class="cursor-pointer shrink-0">
               <input type="file" accept="image/*" multiple data-upload-class="${cls.id}" class="hidden" />
               <div class="text-center py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-semibold transition">
@@ -512,7 +567,7 @@
         nameInput.addEventListener('input', (e) => {
           cls.name = e.target.value.trim() || `กลุ่มที่ ${index + 1}`;
           renderConfidenceBars();
-          renderAssignClassButtons();
+          renderAssignClassSearchResults();
         });
 
         const delClassBtn = card.querySelector(`[data-delete-class="${cls.id}"]`);
@@ -523,7 +578,7 @@
             stopLivePrediction();
             renderClasses();
             renderConfidenceBars();
-            renderAssignClassButtons();
+            renderAssignClassSearchResults();
             updateBadge();
             updateTrainButton();
           });
@@ -555,7 +610,7 @@
         });
       });
 
-      renderAssignClassButtons();
+      renderAssignClassSearchResults();
       updateTrainButton();
     }
 
@@ -959,6 +1014,16 @@
         capturedQueue = [];
         renderCapturedTray();
         setStatus('ล้างรูปที่ถ่ายในถาดเรียบร้อยแล้ว');
+      });
+
+      els.assignSearchInput.addEventListener('input', () => {
+        renderAssignClassSearchResults();
+      });
+
+      els.clearAssignSearchBtn.addEventListener('click', () => {
+        els.assignSearchInput.value = '';
+        renderAssignClassSearchResults();
+        els.assignSearchInput.focus();
       });
 
       els.stopPredictBtn.addEventListener('click', () => {
