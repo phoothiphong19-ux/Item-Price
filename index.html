@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Teachable Machine Mobile — Light Theme</title>
+  <title>Teachable Machine Mobile</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1"></script>
@@ -75,7 +75,7 @@
 
         <div id="cameraPlaceholder" class="text-center px-4 space-y-2">
           <p class="text-sm font-medium text-slate-600">ยังไม่ได้เปิดกล้อง</p>
-          <p id="cameraHint" class="text-xs text-slate-400">กด "เปิด/ปิดกล้อง" เพื่อเริ่มเก็บภาพ หรืออัปโหลดรูปภาพในแต่ละกลุ่มได้ทันที</p>
+          <p id="cameraHint" class="text-xs text-slate-400">กด "เปิด/ปิดกล้อง" เพื่อเริ่มถ่ายภาพ หรืออัปโหลดรูปภาพในแต่ละกลุ่มได้ทันที</p>
         </div>
 
         <div id="predictionBanner" class="hidden absolute bottom-3 left-3 right-3 bg-white/95 backdrop-blur border border-slate-200 shadow-md rounded-xl px-3.5 py-2.5 flex items-center justify-between">
@@ -84,6 +84,40 @@
             <div id="topLabel" class="text-base font-bold text-indigo-700">-</div>
           </div>
           <div id="topConfidence" class="text-xl font-extrabold text-slate-900">0%</div>
+        </div>
+      </div>
+
+      <!-- Direct Capture Controls on Camera -->
+      <div class="grid grid-cols-2 gap-2">
+        <button id="snapPhotoBtn" type="button"
+          class="py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-semibold shadow-sm transition">
+          ถ่ายภาพ (1 รูป)
+        </button>
+        <button id="holdSnapBtn" type="button"
+          class="hold-btn py-2.5 px-3 rounded-xl bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white text-xs font-semibold shadow-sm transition">
+          กดค้างถ่ายต่อเนื่อง
+        </button>
+      </div>
+
+      <!-- Captured Photos Tray -->
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5">
+        <div class="flex items-center justify-between gap-2">
+          <div class="text-xs font-semibold text-slate-800">
+            รูปที่ถ่ายไว้ (<span id="capturedCount">0</span> รูป)
+          </div>
+          <button id="clearCapturedBtn" type="button"
+            class="text-[11px] font-medium text-rose-600 hover:text-rose-700 underline">
+            ล้างรูปที่ถ่าย
+          </button>
+        </div>
+
+        <div id="capturedTray" class="thumb-strip flex items-center gap-2 overflow-x-auto pb-1 min-h-[64px]">
+          <div class="text-xs text-slate-400">ยังไม่มีรูปที่ถ่ายจากกล้อง — กด "ถ่ายภาพ" หรือ "กดค้างถ่ายต่อเนื่อง" ด้านบน</div>
+        </div>
+
+        <div class="space-y-1.5 pt-1 border-t border-slate-200/80">
+          <div class="text-[11px] font-medium text-slate-600">กดเลือกกลุ่มเพื่อส่งรูปที่ถ่ายทั้งหมดเข้ากลุ่มนั้น:</div>
+          <div id="assignClassButtons" class="flex flex-wrap gap-1.5"></div>
         </div>
       </div>
 
@@ -188,7 +222,6 @@
   </div>
 
   <script>
-    // ตั้งค่า URL เริ่มต้นของไฟล์ .json ที่นี่หากต้องการให้ทุกเครื่องโหลดอัตโนมัติ (เว้นว่าง '' หากไม่ใช้)
     const DEFAULT_MODEL_URL = 'model.json';
     const MODEL_URL_STORAGE_KEY = 'teachable_mobile_model_url_v1';
 
@@ -208,6 +241,9 @@
     let facingMode = 'user';
     let holdInterval = null;
 
+    // Temporary photos captured from camera waiting to be assigned to a class
+    let capturedQueue = []; // [{ dataUrl, embedding }]
+
     let classes = [];
     let classCounter = 0;
 
@@ -223,6 +259,12 @@
       predictionBanner: document.getElementById('predictionBanner'),
       topLabel: document.getElementById('topLabel'),
       topConfidence: document.getElementById('topConfidence'),
+      snapPhotoBtn: document.getElementById('snapPhotoBtn'),
+      holdSnapBtn: document.getElementById('holdSnapBtn'),
+      capturedCount: document.getElementById('capturedCount'),
+      clearCapturedBtn: document.getElementById('clearCapturedBtn'),
+      capturedTray: document.getElementById('capturedTray'),
+      assignClassButtons: document.getElementById('assignClassButtons'),
       confidenceList: document.getElementById('confidenceList'),
       testImageInput: document.getElementById('testImageInput'),
       stopPredictBtn: document.getElementById('stopPredictBtn'),
@@ -249,9 +291,7 @@
         if (savedUrl !== null && savedUrl.trim() !== '') {
           return savedUrl.trim();
         }
-      } catch (e) {
-        // ignore storage access issues
-      }
+      } catch (e) {}
       return (DEFAULT_MODEL_URL || '').trim();
     }
 
@@ -335,6 +375,66 @@
       };
     }
 
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function renderCapturedTray() {
+      els.capturedCount.textContent = String(capturedQueue.length);
+
+      if (!capturedQueue.length) {
+        els.capturedTray.innerHTML = `<div class="text-xs text-slate-400">ยังไม่มีรูปที่ถ่ายจากกล้อง — กด "ถ่ายภาพ" หรือ "กดค้างถ่ายต่อเนื่อง" ด้านบน</div>`;
+      } else {
+        els.capturedTray.innerHTML = capturedQueue.map((item, idx) => `
+          <div class="relative shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-slate-200 bg-white">
+            <img src="${item.dataUrl}" alt="ภาพที่ถ่าย" class="w-full h-full object-cover" />
+            <button type="button" data-del-captured="${idx}" aria-label="ลบรูปที่ถ่าย"
+              class="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-slate-900/75 text-white text-[10px] leading-none flex items-center justify-center">
+              ×
+            </button>
+          </div>
+        `).join('');
+
+        els.capturedTray.querySelectorAll('[data-del-captured]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const idx = Number(btn.getAttribute('data-del-captured'));
+            capturedQueue.splice(idx, 1);
+            renderCapturedTray();
+          });
+        });
+      }
+
+      renderAssignClassButtons();
+    }
+
+    function renderAssignClassButtons() {
+      els.assignClassButtons.innerHTML = '';
+      const hasPhotos = capturedQueue.length > 0;
+
+      classes.forEach((cls) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.disabled = !hasPhotos;
+        btn.className = 'text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white transition';
+        btn.textContent = `ใส่กลุ่ม "${cls.name}"`;
+        btn.addEventListener('click', () => {
+          if (!capturedQueue.length) return;
+          const countToMove = capturedQueue.length;
+          cls.samples.push(...capturedQueue);
+          capturedQueue = [];
+          renderCapturedTray();
+          renderClasses();
+          updateTrainButton();
+          setStatus(`ย้ายรูปที่ถ่าย ${countToMove} รูปเข้ากลุ่ม "${cls.name}" แล้ว (${cls.samples.length} ภาพในกลุ่ม)`);
+        });
+        els.assignClassButtons.appendChild(btn);
+      });
+    }
+
     function renderConfidenceBars(confidences = {}) {
       els.confidenceList.innerHTML = '';
       if (!classes.length) return;
@@ -374,7 +474,7 @@
                 </button>
               </div>
             `).join('')
-          : `<div class="text-xs text-slate-400 py-3">ยังไม่มีภาพตัวอย่างในกลุ่มนี้</div>`;
+          : `<div class="text-xs text-slate-400 py-2">ยังไม่มีภาพตัวอย่างในกลุ่มนี้</div>`;
 
         card.innerHTML = `
           <div class="flex items-center justify-between gap-2">
@@ -391,14 +491,11 @@
             ` : ''}
           </div>
 
-          <div class="grid grid-cols-2 gap-2">
-            <button type="button" data-hold-class="${cls.id}"
-              class="hold-btn py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-semibold shadow-sm transition">
-              กดค้างเพื่อถ่ายภาพ
-            </button>
-            <label class="cursor-pointer">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-[11px] text-slate-500">ถ่ายจากกล้องด้านบนแล้วกดใส่กลุ่มนี้ หรืออัปโหลดไฟล์รูปภาพ:</span>
+            <label class="cursor-pointer shrink-0">
               <input type="file" accept="image/*" multiple data-upload-class="${cls.id}" class="hidden" />
-              <div class="w-full text-center py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-semibold transition">
+              <div class="text-center py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-semibold transition">
                 อัปโหลดรูปภาพ
               </div>
             </label>
@@ -415,6 +512,7 @@
         nameInput.addEventListener('input', (e) => {
           cls.name = e.target.value.trim() || `กลุ่มที่ ${index + 1}`;
           renderConfidenceBars();
+          renderAssignClassButtons();
         });
 
         const delClassBtn = card.querySelector(`[data-delete-class="${cls.id}"]`);
@@ -425,31 +523,11 @@
             stopLivePrediction();
             renderClasses();
             renderConfidenceBars();
+            renderAssignClassButtons();
             updateBadge();
             updateTrainButton();
           });
         }
-
-        const holdBtn = card.querySelector(`[data-hold-class="${cls.id}"]`);
-        const startHold = (e) => {
-          e.preventDefault();
-          if (!isModelReady) return setStatus('รอโมเดล MobileNet โหลดเสร็จก่อนครับ', true);
-          if (!stream) return setStatus('กรุณากด "เปิด/ปิดกล้อง" ก่อนถ่ายภาพครับ', true);
-          captureFrameToClass(cls);
-          clearInterval(holdInterval);
-          holdInterval = setInterval(() => captureFrameToClass(cls), 200);
-        };
-        const stopHold = () => {
-          if (holdInterval) {
-            clearInterval(holdInterval);
-            holdInterval = null;
-          }
-        };
-
-        holdBtn.addEventListener('pointerdown', startHold);
-        holdBtn.addEventListener('pointerup', stopHold);
-        holdBtn.addEventListener('pointerleave', stopHold);
-        holdBtn.addEventListener('pointercancel', stopHold);
 
         const uploadInput = card.querySelector(`[data-upload-class="${cls.id}"]`);
         uploadInput.addEventListener('change', async (e) => {
@@ -477,20 +555,13 @@
         });
       });
 
+      renderAssignClassButtons();
       updateTrainButton();
     }
 
     function updateTrainButton() {
       const classesWithData = classes.filter((c) => c.samples.length > 0).length;
       els.trainBtn.disabled = !(isModelReady && classesWithData >= 2);
-    }
-
-    function escapeHtml(str) {
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
     }
 
     async function startCamera() {
@@ -521,6 +592,10 @@
 
     function stopCamera() {
       stopLivePrediction();
+      if (holdInterval) {
+        clearInterval(holdInterval);
+        holdInterval = null;
+      }
       if (stream) {
         stream.getTracks().forEach((t) => t.stop());
         stream = null;
@@ -558,13 +633,20 @@
       });
     }
 
-    function captureFrameToClass(cls) {
-      if (!stream || !els.webcam.videoWidth) return;
+    function capturePhotoToTray() {
+      if (!isModelReady) {
+        setStatus('รอโมเดล MobileNet โหลดเสร็จก่อนครับ', true);
+        return;
+      }
+      if (!stream || !els.webcam.videoWidth) {
+        setStatus('กรุณากด "เปิด/ปิดกล้อง" ก่อนถ่ายภาพครับ', true);
+        return;
+      }
       const dataUrl = captureDataUrlFromVideo(140);
       const emb = extractEmbeddingFromElement(els.webcam);
-      cls.samples.push({ dataUrl, embedding: emb });
-      renderClasses();
-      setStatus(`เก็บภาพเข้า "${cls.name}" แล้ว (${cls.samples.length} ภาพ)`);
+      capturedQueue.push({ dataUrl, embedding: emb });
+      renderCapturedTray();
+      setStatus(`ถ่ายภาพแล้ว (${capturedQueue.length} รูปในถาดรอจัดกลุ่ม)`);
     }
 
     function addImageFileToClass(cls, file) {
@@ -643,9 +725,7 @@
           const result = await classifier.predictClass(activation, 5);
           activation.dispose();
           applyPredictionResult(result);
-        } catch (err) {
-          // ignore transient frame error
-        }
+        } catch (err) {}
       }, 220);
     }
 
@@ -851,6 +931,36 @@
         }
       });
 
+      els.snapPhotoBtn.addEventListener('click', () => {
+        capturePhotoToTray();
+      });
+
+      const startHoldSnap = (e) => {
+        e.preventDefault();
+        if (!isModelReady) return setStatus('รอโมเดล MobileNet โหลดเสร็จก่อนครับ', true);
+        if (!stream) return setStatus('กรุณากด "เปิด/ปิดกล้อง" ก่อนถ่ายภาพครับ', true);
+        capturePhotoToTray();
+        clearInterval(holdInterval);
+        holdInterval = setInterval(() => capturePhotoToTray(), 200);
+      };
+      const stopHoldSnap = () => {
+        if (holdInterval) {
+          clearInterval(holdInterval);
+          holdInterval = null;
+        }
+      };
+
+      els.holdSnapBtn.addEventListener('pointerdown', startHoldSnap);
+      els.holdSnapBtn.addEventListener('pointerup', stopHoldSnap);
+      els.holdSnapBtn.addEventListener('pointerleave', stopHoldSnap);
+      els.holdSnapBtn.addEventListener('pointercancel', stopHoldSnap);
+
+      els.clearCapturedBtn.addEventListener('click', () => {
+        capturedQueue = [];
+        renderCapturedTray();
+        setStatus('ล้างรูปที่ถ่ายในถาดเรียบร้อยแล้ว');
+      });
+
       els.stopPredictBtn.addEventListener('click', () => {
         stopLivePrediction();
         setStatus('หยุดการทำนายแบบเรียลไทม์แล้ว');
@@ -937,6 +1047,7 @@
       classes = [createClassItem('กลุ่มที่ 1'), createClassItem('กลุ่มที่ 2')];
       bindGlobalEvents();
       renderClasses();
+      renderCapturedTray();
       renderConfidenceBars();
       updateBadge();
 
