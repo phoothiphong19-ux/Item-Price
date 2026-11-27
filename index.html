@@ -124,11 +124,11 @@
       <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2 text-xs">
         <div class="flex items-center justify-between gap-2">
           <label for="thresholdRange" class="font-semibold text-slate-700">
-            เกณฑ์ความมั่นใจขั้นต่ำ: <span id="thresholdLabel" class="text-indigo-700">55%</span>
+            เกณฑ์ความมั่นใจขั้นต่ำ: <span id="thresholdLabel" class="text-indigo-700">90%</span>
           </label>
           <span class="text-[11px] text-slate-400">ต่ำกว่านี้จะเตือนให้ถ่ายใหม่</span>
         </div>
-        <input id="thresholdRange" type="range" min="20" max="90" step="5" value="55"
+        <input id="thresholdRange" type="range" min="20" max="90" step="5" value="90"
           class="w-full accent-indigo-600 cursor-pointer" />
       </div>
 
@@ -341,7 +341,7 @@
     let assignLimit = PAGE_SIZE;
     let classesLimit = PAGE_SIZE;
 
-    let confidenceThreshold = 0.55;
+    let confidenceThreshold = 0.90;
     let latestPrediction = null; // { classId, name, price, confidence, isConfident }
     let cartItems = []; // { classId, name, price, qty }
 
