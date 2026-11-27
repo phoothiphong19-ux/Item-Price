@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Teachable Machine Mobile</title>
+  <title>Smart Retail Classifier</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1"></script>
@@ -27,19 +27,17 @@
     .mirror-video {
       transform: scaleX(-1);
     }
-    .thumb-strip::-webkit-scrollbar,
     .thin-scroll::-webkit-scrollbar {
       height: 5px;
       width: 5px;
     }
-    .thumb-strip::-webkit-scrollbar-thumb,
     .thin-scroll::-webkit-scrollbar-thumb {
       background: #cbd5e1;
       border-radius: 9999px;
     }
   </style>
 </head>
-<body class="min-h-screen bg-slate-50 text-slate-900 pb-12">
+<body class="min-h-screen bg-slate-50 text-slate-900 pb-14">
   <div class="max-w-xl mx-auto px-4 pt-4 space-y-4">
 
     <!-- Header -->
@@ -47,7 +45,7 @@
       <div>
         <div class="flex items-center gap-2">
           <span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-          <h1 class="text-lg font-bold tracking-tight text-slate-900">Teachable Machine Mobile</h1>
+          <h1 class="text-base sm:text-lg font-bold tracking-tight text-slate-900">Techable Machine by New</h1>
         </div>
         <p id="statusText" class="text-xs text-slate-500 mt-0.5">กำลังโหลดโมเดล TensorFlow.js &amp; MobileNet...</p>
       </div>
@@ -56,17 +54,17 @@
       </span>
     </header>
 
-    <!-- Camera & Live Prediction Card -->
+    <!-- Camera & Prediction Card -->
     <section class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
       <div class="flex items-center justify-between gap-2">
-        <h2 class="text-sm font-semibold text-slate-800">กล้องและผลทำนายแบบเรียลไทม์</h2>
-        <div class="flex items-center gap-2">
+        <h2 class="text-sm font-semibold text-slate-800">กล้องและระบบทำนายราคา</h2>
+        <div class="flex items-center gap-1.5">
           <button id="toggleCameraBtn" type="button"
-            class="text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition">
+            class="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition">
             เปิด/ปิดกล้อง
           </button>
           <button id="flipCameraBtn" type="button"
-            class="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition">
+            class="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition">
             สลับกล้อง
           </button>
         </div>
@@ -78,57 +76,88 @@
 
         <div id="cameraPlaceholder" class="text-center px-4 space-y-2">
           <p class="text-sm font-medium text-slate-600">ยังไม่ได้เปิดกล้อง</p>
-          <p id="cameraHint" class="text-xs text-slate-400">กด "เปิด/ปิดกล้อง" เพื่อเริ่มถ่ายภาพ หรืออัปโหลดรูปภาพในแต่ละกลุ่มได้ทันที</p>
+          <p id="cameraHint" class="text-xs text-slate-400">กด "เปิด/ปิดกล้อง" เพื่อถ่ายภาพนิ่งทำนาย เก็บฟีเจอร์เทรน หรือเปิดทำนายสด</p>
         </div>
 
-        <div id="predictionBanner" class="hidden absolute bottom-3 left-3 right-3 bg-white/95 backdrop-blur border border-slate-200 shadow-md rounded-xl px-3.5 py-2.5 flex items-center justify-between">
-          <div>
-            <div class="text-[11px] uppercase tracking-wider font-semibold text-slate-400">ผลทำนายสูงสุด</div>
-            <div id="topLabel" class="text-base font-bold text-indigo-700">-</div>
+        <div id="predictionBanner" class="hidden absolute bottom-3 left-3 right-3 bg-white/95 backdrop-blur border border-slate-200 shadow-md rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div id="predStatusNote" class="text-[11px] uppercase tracking-wider font-semibold text-slate-400">ผลทำนายสูงสุด</div>
+            <div id="topLabel" class="text-base font-bold text-indigo-700 truncate">-</div>
           </div>
-          <div id="topConfidence" class="text-xl font-extrabold text-slate-900">0%</div>
+          <div class="text-right shrink-0">
+            <div id="topPriceValue" class="text-lg font-extrabold text-emerald-600">-</div>
+            <div id="topConfidence" class="text-xs font-bold text-slate-600">0%</div>
+          </div>
         </div>
       </div>
 
-      <!-- Direct Capture Controls on Camera -->
-      <div class="grid grid-cols-2 gap-2">
+      <!-- Active Prediction Result Bar & Add to Cart -->
+      <div id="activeResultCard" class="bg-indigo-50/60 border border-indigo-100 rounded-xl p-3 flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <div class="text-[11px] font-semibold text-indigo-600">รายการล่าสุดที่ตรวจพบ</div>
+          <div id="latestProductName" class="text-sm font-bold text-slate-900 truncate">ยังไม่มีผลทำนาย</div>
+          <div id="latestPriceDetail" class="text-xs text-slate-600">ราคา: -</div>
+        </div>
+        <button id="addPredictedToCartBtn" type="button" disabled
+          class="shrink-0 text-xs font-semibold px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white shadow-sm transition">
+          + ลงบิล
+        </button>
+      </div>
+
+      <!-- Snapshot Predict & Capture Controls -->
+      <div class="grid grid-cols-3 gap-2">
+        <button id="snapshotPredictBtn" type="button"
+          class="py-2.5 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-semibold shadow-sm transition">
+          ถ่ายนิ่งแล้วทำนาย
+        </button>
         <button id="snapPhotoBtn" type="button"
-          class="py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-semibold shadow-sm transition">
-          ถ่ายภาพ (1 รูป)
+          class="py-2.5 px-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-semibold shadow-sm transition">
+          เก็บฟีเจอร์ (1 รูป)
         </button>
         <button id="holdSnapBtn" type="button"
-          class="hold-btn py-2.5 px-3 rounded-xl bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white text-xs font-semibold shadow-sm transition">
-          กดค้างถ่ายต่อเนื่อง
+          class="hold-btn py-2.5 px-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white text-xs font-semibold shadow-sm transition">
+          กดค้างเก็บต่อเนื่อง
         </button>
       </div>
 
-      <!-- Captured Photos Tray + Searchable Class Picker -->
+      <!-- Confidence Threshold -->
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2 text-xs">
+        <div class="flex items-center justify-between gap-2">
+          <label for="thresholdRange" class="font-semibold text-slate-700">
+            เกณฑ์ความมั่นใจขั้นต่ำ: <span id="thresholdLabel" class="text-indigo-700">55%</span>
+          </label>
+          <span class="text-[11px] text-slate-400">ต่ำกว่านี้จะเตือนให้ถ่ายใหม่</span>
+        </div>
+        <input id="thresholdRange" type="range" min="20" max="90" step="5" value="55"
+          class="w-full accent-indigo-600 cursor-pointer" />
+      </div>
+
+      <!-- Queued Embeddings Tray (No Thumbnail Images) + Searchable Class Picker -->
       <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5">
         <div class="flex items-center justify-between gap-2">
           <div class="text-xs font-semibold text-slate-800">
-            รูปที่ถ่ายไว้ (<span id="capturedCount">0</span> รูป)
+            ฟีเจอร์ที่เก็บไว้รอลงกลุ่ม: <span id="capturedCount" class="text-indigo-700">0</span> ตัวอย่าง
           </div>
           <button id="clearCapturedBtn" type="button"
             class="text-[11px] font-medium text-rose-600 hover:text-rose-700 underline">
-            ล้างรูปที่ถ่าย
+            ล้างที่เก็บไว้
           </button>
         </div>
 
-        <div id="capturedTray" class="thumb-strip flex items-center gap-2 overflow-x-auto pb-1 min-h-[64px]">
-          <div class="text-xs text-slate-400">ยังไม่มีรูปที่ถ่ายจากกล้อง — กด "ถ่ายภาพ" หรือ "กดค้างถ่ายต่อเนื่อง" ด้านบน</div>
-        </div>
+        <p class="text-[11px] text-slate-400">
+          โหมดไม่เก็บรูปย่อ — เก็บเฉพาะค่าฟีเจอร์เพื่อประหยัดหน่วยความจำและทำให้เว็บลื่นขึ้น
+        </p>
 
-        <!-- Search & Assign to Class -->
         <div class="space-y-2 pt-2 border-t border-slate-200/80">
           <div class="flex items-center justify-between gap-2">
             <label for="assignSearchInput" class="text-[11px] font-semibold text-slate-700">
-              ค้นหาชื่อกลุ่มเพื่อเพิ่มรูปที่ถ่ายทั้งหมดเข้ากลุ่ม:
+              ค้นหาสินค้าเพื่อเพิ่มฟีเจอร์ทั้งหมดเข้ากลุ่ม:
             </label>
             <span id="assignMatchCount" class="text-[11px] text-slate-400"></span>
           </div>
 
           <div class="relative flex items-center">
-            <input id="assignSearchInput" type="search" placeholder="พิมพ์ชื่อกลุ่มหรือราคาที่ต้องการค้นหา..."
+            <input id="assignSearchInput" type="search" placeholder="พิมพ์ชื่อสินค้าหรือราคา..."
               class="w-full text-xs text-slate-900 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-3 pr-14 py-2 outline-none transition" />
             <button id="clearAssignSearchBtn" type="button"
               class="hidden absolute right-2 text-[11px] font-medium text-slate-500 hover:text-slate-800 px-2 py-0.5 rounded bg-slate-100">
@@ -143,21 +172,21 @@
       <!-- Top 3 Confidence Bars -->
       <div id="confidenceList" class="space-y-2 pt-1"></div>
 
-      <!-- Test With Uploaded Image -->
-      <div class="pt-2 border-t border-slate-100 flex items-center justify-between gap-3">
-        <label class="flex-1 cursor-pointer">
+      <!-- Live Mode Toggle & Test With Uploaded Image -->
+      <div class="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+        <label class="flex-1 min-w-[160px] cursor-pointer">
           <input id="testImageInput" type="file" accept="image/*" class="hidden" />
           <div class="w-full text-center text-xs font-semibold py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 transition">
             ทดสอบด้วยรูปภาพจากเครื่อง
           </div>
         </label>
-        <button id="stopPredictBtn" type="button"
-          class="hidden text-xs font-semibold py-2.5 px-3.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition">
-          หยุดทำนายสด
+        <button id="toggleLivePredictBtn" type="button"
+          class="text-xs font-semibold py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition">
+          เริ่มทำนายสด
         </button>
       </div>
-      <div id="testImagePreviewBox" class="hidden bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center gap-3">
-        <img id="testImagePreview" alt="ภาพทดสอบ" class="w-16 h-16 object-cover rounded-lg border border-slate-200 shrink-0" />
+
+      <div id="testImagePreviewBox" class="hidden bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between gap-3">
         <div class="text-xs space-y-0.5 min-w-0">
           <div class="font-semibold text-slate-800">ผลทดสอบจากรูปภาพ:</div>
           <div id="testImageResult" class="text-indigo-700 font-bold truncate">-</div>
@@ -165,13 +194,35 @@
       </div>
     </section>
 
-    <!-- Training & Save/Load Model Card (Placed above classes for quick access) -->
+    <!-- POS / Cart Section -->
+    <section class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="text-sm font-semibold text-slate-800">รายการคิดเงิน (บิลปัจจุบัน)</h2>
+        <button id="clearCartBtn" type="button"
+          class="text-[11px] font-medium text-rose-600 hover:text-rose-700 underline">
+          ล้างบิล
+        </button>
+      </div>
+
+      <div id="cartItemsContainer" class="thin-scroll max-h-44 overflow-y-auto space-y-1.5">
+        <div class="text-xs text-slate-400 text-center py-3 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+          ยังไม่มีรายการในบิล — ทำนายสินค้าแล้วกด "+ ลงบิล"
+        </div>
+      </div>
+
+      <div class="pt-2.5 border-t border-slate-200 flex items-center justify-between">
+        <span class="text-xs font-semibold text-slate-600">ยอดรวมทั้งหมด (<span id="cartQtyCount">0</span> ชิ้น)</span>
+        <span id="cartTotalPrice" class="text-lg font-extrabold text-emerald-600">0.00 บาท</span>
+      </div>
+    </section>
+
+    <!-- Training & Save/Load Model Card -->
     <section class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
       <h2 class="text-sm font-semibold text-slate-800">ฝึกสอน และบันทึก/โหลดโมเดล</h2>
 
       <button id="trainBtn" type="button"
         class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-sm shadow-sm transition">
-        ฝึกสอนโมเดลและเริ่มทำนาย
+        ฝึกสอนโมเดล (KNN)
       </button>
 
       <!-- Auto-Load From URL -->
@@ -218,7 +269,7 @@
       </div>
 
       <div class="flex items-center justify-between pt-1 border-t border-slate-100">
-        <span id="storageInfo" class="text-[11px] text-slate-500">ใช้ IndexedDB สำหรับเก็บภาพและโมเดลในเบราว์เซอร์</span>
+        <span id="storageInfo" class="text-[11px] text-slate-500">ใช้ IndexedDB สำหรับเก็บข้อมูลในเบราว์เซอร์</span>
         <button id="clearSavedBtn" type="button"
           class="text-[11px] font-medium text-rose-600 hover:text-rose-700 underline">
           ล้างข้อมูลที่บันทึก
@@ -226,11 +277,12 @@
       </div>
     </section>
 
-    <!-- Classes Section (Compact, Searchable & Collapsible) -->
+    <!-- Classes & Pricing Section -->
     <section class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
       <div class="flex items-center justify-between gap-2">
         <div>
-          <h2 class="text-sm font-semibold text-slate-800">กลุ่มข้อมูลสำหรับฝึกสอน (<span id="classTotalCount">0</span>)</h2>
+          <h2 class="text-sm font-semibold text-slate-800">สินค้าและราคา (<span id="classTotalCount">0</span>)</h2>
+          <p class="text-[11px] text-slate-400">แก้ราคาได้ทันทีโดยไม่ต้องเทรนโมเดลใหม่</p>
         </div>
         <div class="flex items-center gap-1.5">
           <button id="toggleCollapseAllBtn" type="button"
@@ -239,13 +291,13 @@
           </button>
           <button id="addClassBtn" type="button"
             class="text-xs font-semibold px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition">
-            + เพิ่มกลุ่ม
+            + เพิ่มสินค้า
           </button>
         </div>
       </div>
 
       <div class="relative flex items-center">
-        <input id="classFilterInput" type="search" placeholder="ค้นหากลุ่มในรายการฝึกสอน..."
+        <input id="classFilterInput" type="search" placeholder="ค้นหาชื่อสินค้าหรือราคา..."
           class="w-full text-xs text-slate-900 bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-3 pr-14 py-2 outline-none transition" />
         <button id="clearClassFilterBtn" type="button"
           class="hidden absolute right-2 text-[11px] font-medium text-slate-500 hover:text-slate-800 px-2 py-0.5 rounded bg-slate-100">
@@ -253,19 +305,21 @@
         </button>
       </div>
 
-      <div id="classesContainer" class="thin-scroll max-h-[420px] overflow-y-auto space-y-2 pr-0.5"></div>
+      <div id="classesContainer" class="thin-scroll max-h-[480px] overflow-y-auto space-y-2.5 pr-0.5"></div>
     </section>
 
   </div>
 
   <script>
-    const DEFAULT_MODEL_URL = 'model.json'; // ใส่ชื่อ model
+    const DEFAULT_MODEL_URL = '';
     const MODEL_URL_STORAGE_KEY = 'teachable_mobile_model_url_v1';
 
-    const DB_NAME = 'TeachableMobileLightDB';
+    const DB_NAME = 'TeachableMobileLiteNoThumbDB';
     const DB_VERSION = 1;
     const STORE_NAME = 'models';
     const MODEL_RECORD_ID = 'active_model';
+
+    const PAGE_SIZE = 25;
 
     let mobilenetModel = null;
     let classifier = null;
@@ -275,13 +329,21 @@
     let predictTimer = null;
 
     let stream = null;
-    let facingMode = 'user';
+    let facingMode = 'environment';
     let holdInterval = null;
 
-    let capturedQueue = [];
-    let classes = [];
+    // Store only embeddings (no thumbnail dataUrls)
+    let queuedEmbeddings = []; // Array<{ data: number[], shape: number[] }>
+    let classes = []; // Array<{ id, name, basePrice, embeddings: Array<{ data, shape }>, collapsed }>
     let classCounter = 0;
     let collapseAllState = false;
+
+    let assignLimit = PAGE_SIZE;
+    let classesLimit = PAGE_SIZE;
+
+    let confidenceThreshold = 0.55;
+    let latestPrediction = null; // { classId, name, price, confidence, isConfident }
+    let cartItems = []; // { classId, name, price, qty }
 
     const els = {
       statusText: document.getElementById('statusText'),
@@ -293,23 +355,33 @@
       cameraPlaceholder: document.getElementById('cameraPlaceholder'),
       cameraHint: document.getElementById('cameraHint'),
       predictionBanner: document.getElementById('predictionBanner'),
+      predStatusNote: document.getElementById('predStatusNote'),
       topLabel: document.getElementById('topLabel'),
+      topPriceValue: document.getElementById('topPriceValue'),
       topConfidence: document.getElementById('topConfidence'),
+      latestProductName: document.getElementById('latestProductName'),
+      latestPriceDetail: document.getElementById('latestPriceDetail'),
+      addPredictedToCartBtn: document.getElementById('addPredictedToCartBtn'),
+      snapshotPredictBtn: document.getElementById('snapshotPredictBtn'),
       snapPhotoBtn: document.getElementById('snapPhotoBtn'),
       holdSnapBtn: document.getElementById('holdSnapBtn'),
+      thresholdRange: document.getElementById('thresholdRange'),
+      thresholdLabel: document.getElementById('thresholdLabel'),
       capturedCount: document.getElementById('capturedCount'),
       clearCapturedBtn: document.getElementById('clearCapturedBtn'),
-      capturedTray: document.getElementById('capturedTray'),
       assignSearchInput: document.getElementById('assignSearchInput'),
       clearAssignSearchBtn: document.getElementById('clearAssignSearchBtn'),
       assignMatchCount: document.getElementById('assignMatchCount'),
       assignClassResults: document.getElementById('assignClassResults'),
       confidenceList: document.getElementById('confidenceList'),
       testImageInput: document.getElementById('testImageInput'),
-      stopPredictBtn: document.getElementById('stopPredictBtn'),
+      toggleLivePredictBtn: document.getElementById('toggleLivePredictBtn'),
       testImagePreviewBox: document.getElementById('testImagePreviewBox'),
-      testImagePreview: document.getElementById('testImagePreview'),
       testImageResult: document.getElementById('testImageResult'),
+      cartItemsContainer: document.getElementById('cartItemsContainer'),
+      clearCartBtn: document.getElementById('clearCartBtn'),
+      cartQtyCount: document.getElementById('cartQtyCount'),
+      cartTotalPrice: document.getElementById('cartTotalPrice'),
       classTotalCount: document.getElementById('classTotalCount'),
       toggleCollapseAllBtn: document.getElementById('toggleCollapseAllBtn'),
       classFilterInput: document.getElementById('classFilterInput'),
@@ -327,6 +399,29 @@
       clearSavedBtn: document.getElementById('clearSavedBtn'),
       storageInfo: document.getElementById('storageInfo'),
     };
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function formatBaht(val) {
+      const num = Math.max(0, Number(val) || 0);
+      return `${num.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} บาท`;
+    }
+
+    function syncLatestPredictionPrice() {
+      if (!latestPrediction) return;
+      const cls = classes.find((c) => c.id === latestPrediction.classId);
+      if (cls) {
+        latestPrediction.name = cls.name;
+        latestPrediction.price = Math.max(0, Number(cls.basePrice) || 0);
+      }
+      renderLatestPredictionUI();
+    }
 
     function getActiveModelUrl() {
       try {
@@ -404,54 +499,131 @@
         els.modelBadge.textContent = 'พร้อมทำนาย';
         els.modelBadge.className = 'shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200';
       } else {
-        els.modelBadge.textContent = 'พร้อมเก็บภาพ';
+        els.modelBadge.textContent = 'พร้อมเก็บฟีเจอร์';
         els.modelBadge.className = 'shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200';
       }
     }
 
-    function createClassItem(customName) {
+    function createClassItem(customName, basePrice = 20) {
       classCounter += 1;
       return {
         id: `class_${Date.now()}_${classCounter}`,
-        name: customName || `กลุ่มที่ ${classCounter}`,
-        samples: [],
+        name: customName || `สินค้าที่ ${classCounter}`,
+        basePrice: Math.max(0, Number(basePrice) || 0),
+        embeddings: [],
         collapsed: collapseAllState
       };
     }
 
-    function escapeHtml(str) {
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    }
-
-    function renderCapturedTray() {
-      els.capturedCount.textContent = String(capturedQueue.length);
-
-      if (!capturedQueue.length) {
-        els.capturedTray.innerHTML = `<div class="text-xs text-slate-400">ยังไม่มีรูปที่ถ่ายจากกล้อง — กด "ถ่ายภาพ" หรือ "กดค้างถ่ายต่อเนื่อง" ด้านบน</div>`;
-      } else {
-        els.capturedTray.innerHTML = capturedQueue.map((item, idx) => `
-          <div class="relative shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-slate-200 bg-white">
-            <img src="${item.dataUrl}" alt="ภาพที่ถ่าย" class="w-full h-full object-cover" />
-            <button type="button" data-del-captured="${idx}" aria-label="ลบรูปที่ถ่าย"
-              class="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-slate-900/75 text-white text-[10px] leading-none flex items-center justify-center">
-              ×
-            </button>
-          </div>
-        `).join('');
-
-        els.capturedTray.querySelectorAll('[data-del-captured]').forEach((btn) => {
-          btn.addEventListener('click', () => {
-            const idx = Number(btn.getAttribute('data-del-captured'));
-            capturedQueue.splice(idx, 1);
-            renderCapturedTray();
-          });
-        });
+    function renderLatestPredictionUI() {
+      if (!latestPrediction) {
+        els.latestProductName.textContent = 'ยังไม่มีผลทำนาย';
+        els.latestPriceDetail.textContent = 'ราคา: -';
+        els.addPredictedToCartBtn.disabled = true;
+        return;
       }
 
+      const pct = Math.round(latestPrediction.confidence * 100);
+      if (!latestPrediction.isConfident) {
+        els.latestProductName.textContent = `ไม่แน่ใจ (${latestPrediction.name} ${pct}%)`;
+        els.latestPriceDetail.textContent = 'ลองจัดกรอบ/แสง หรือกด "ถ่ายนิ่งแล้วทำนาย" อีกครั้ง';
+        els.addPredictedToCartBtn.disabled = true;
+      } else {
+        els.latestProductName.textContent = latestPrediction.name;
+        els.latestPriceDetail.textContent = `ราคา ${formatBaht(latestPrediction.price)} • มั่นใจ ${pct}%`;
+        els.addPredictedToCartBtn.disabled = false;
+      }
+
+      if (stream) {
+        els.predictionBanner.classList.remove('hidden');
+        if (!latestPrediction.isConfident) {
+          els.predStatusNote.textContent = 'ความมั่นใจต่ำกว่าเกณฑ์';
+          els.topLabel.textContent = `ไม่แน่ใจ (${latestPrediction.name})`;
+          els.topPriceValue.textContent = '-';
+          els.topConfidence.textContent = `${pct}%`;
+        } else {
+          els.predStatusNote.textContent = 'ผลทำนายสูงสุด';
+          els.topLabel.textContent = latestPrediction.name;
+          els.topPriceValue.textContent = formatBaht(latestPrediction.price);
+          els.topConfidence.textContent = `${pct}%`;
+        }
+      }
+    }
+
+    function renderCart() {
+      els.cartItemsContainer.innerHTML = '';
+      if (!cartItems.length) {
+        els.cartItemsContainer.innerHTML = `
+          <div class="text-xs text-slate-400 text-center py-3 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+            ยังไม่มีรายการในบิล — ทำนายสินค้าแล้วกด "+ ลงบิล"
+          </div>
+        `;
+        els.cartQtyCount.textContent = '0';
+        els.cartTotalPrice.textContent = '0.00 บาท';
+        return;
+      }
+
+      let totalQty = 0;
+      let totalAmount = 0;
+
+      cartItems.forEach((item, idx) => {
+        const lineTotal = item.price * item.qty;
+        totalQty += item.qty;
+        totalAmount += lineTotal;
+
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs';
+        row.innerHTML = `
+          <div class="min-w-0 flex-1">
+            <div class="font-semibold text-slate-800 truncate">${escapeHtml(item.name)}</div>
+            <div class="text-[11px] text-slate-500">${formatBaht(item.price)} / ชิ้น</div>
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button type="button" data-cart-dec="${idx}" class="w-6 h-6 rounded-md bg-white border border-slate-200 font-bold text-slate-700">-</button>
+            <span class="font-bold text-slate-900 min-w-[20px] text-center">${item.qty}</span>
+            <button type="button" data-cart-inc="${idx}" class="w-6 h-6 rounded-md bg-white border border-slate-200 font-bold text-slate-700">+</button>
+            <span class="font-bold text-emerald-700 min-w-[68px] text-right">${lineTotal.toLocaleString('th-TH')} ฿</span>
+          </div>
+        `;
+        els.cartItemsContainer.appendChild(row);
+
+        row.querySelector(`[data-cart-dec="${idx}"]`).addEventListener('click', () => {
+          item.qty -= 1;
+          if (item.qty <= 0) cartItems.splice(idx, 1);
+          renderCart();
+        });
+
+        row.querySelector(`[data-cart-inc="${idx}"]`).addEventListener('click', () => {
+          item.qty += 1;
+          renderCart();
+        });
+      });
+
+      els.cartQtyCount.textContent = String(totalQty);
+      els.cartTotalPrice.textContent = formatBaht(totalAmount);
+    }
+
+    function addLatestPredictionToCart() {
+      if (!latestPrediction || !latestPrediction.isConfident) return;
+      const existing = cartItems.find(
+        (i) => i.classId === latestPrediction.classId && i.price === latestPrediction.price
+      );
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        cartItems.push({
+          classId: latestPrediction.classId,
+          name: latestPrediction.name,
+          price: latestPrediction.price,
+          qty: 1
+        });
+      }
+      renderCart();
+      setStatus(`เพิ่ม "${latestPrediction.name}" (${formatBaht(latestPrediction.price)}) ลงบิลแล้ว`);
+    }
+
+    function updateQueueCountOnly() {
+      els.capturedCount.textContent = String(queuedEmbeddings.length);
       renderAssignClassSearchResults();
     }
 
@@ -460,27 +632,32 @@
       els.clearAssignSearchBtn.classList.toggle('hidden', keyword.length === 0);
 
       const filtered = keyword
-        ? classes.filter((c) => c.name.toLowerCase().includes(keyword))
+        ? classes.filter((c) =>
+            c.name.toLowerCase().includes(keyword) ||
+            String(c.basePrice || 0).includes(keyword)
+          )
         : classes;
 
       els.assignMatchCount.textContent = keyword
-        ? `พบ ${filtered.length}/${classes.length} กลุ่ม`
-        : `ทั้งหมด ${classes.length} กลุ่ม`;
+        ? `พบ ${filtered.length}/${classes.length} สินค้า`
+        : `ทั้งหมด ${classes.length} สินค้า`;
 
       els.assignClassResults.innerHTML = '';
 
       if (!filtered.length) {
         els.assignClassResults.innerHTML = `
           <div class="text-xs text-slate-400 text-center py-3 bg-white rounded-xl border border-dashed border-slate-200">
-            ไม่พบชื่อกลุ่มที่ตรงกับ "${escapeHtml(els.assignSearchInput.value)}"
+            ไม่พบสินค้าที่ตรงกับ "${escapeHtml(els.assignSearchInput.value)}"
           </div>
         `;
         return;
       }
 
-      const hasPhotos = capturedQueue.length > 0;
+      const hasItems = queuedEmbeddings.length > 0;
+      const sliceItems = filtered.slice(0, assignLimit);
 
-      filtered.forEach((cls) => {
+      sliceItems.forEach((cls) => {
+        const count = cls.embeddings.length;
         const row = document.createElement('div');
         row.className = 'flex items-center justify-between gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2';
 
@@ -488,30 +665,42 @@
         info.className = 'min-w-0 flex-1';
         info.innerHTML = `
           <div class="text-xs font-semibold text-slate-800 truncate">${escapeHtml(cls.name)}</div>
-          <div class="text-[11px] text-slate-400">มีอยู่แล้ว ${cls.samples.length} ภาพ</div>
+          <div class="text-[11px] text-slate-500">${formatBaht(cls.basePrice)} • มีอยู่แล้ว ${count} ตัวอย่าง</div>
         `;
 
         const addBtn = document.createElement('button');
         addBtn.type = 'button';
-        addBtn.disabled = !hasPhotos;
+        addBtn.disabled = !hasItems;
         addBtn.className = 'shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white transition';
-        addBtn.textContent = hasPhotos ? `+ ใส่ ${capturedQueue.length} รูป` : 'เลือกกลุ่ม';
+        addBtn.textContent = hasItems ? `+ ใส่ ${queuedEmbeddings.length} ตัวอย่าง` : 'เลือกสินค้า';
 
         addBtn.addEventListener('click', () => {
-          if (!capturedQueue.length) return;
-          const countToMove = capturedQueue.length;
-          cls.samples.push(...capturedQueue);
-          capturedQueue = [];
-          renderCapturedTray();
-          renderClasses();
+          if (!queuedEmbeddings.length) return;
+          const countToMove = queuedEmbeddings.length;
+          cls.embeddings.push(...queuedEmbeddings);
+          queuedEmbeddings = [];
+          updateQueueCountOnly();
+          refreshSingleClassSummary(cls);
           updateTrainButton();
-          setStatus(`ย้ายรูปที่ถ่าย ${countToMove} รูปเข้ากลุ่ม "${cls.name}" แล้ว (${cls.samples.length} ภาพในกลุ่ม)`);
+          setStatus(`เพิ่มฟีเจอร์ ${countToMove} ตัวอย่างเข้า "${cls.name}" แล้ว (รวม ${cls.embeddings.length} ตัวอย่าง)`);
         });
 
         row.appendChild(info);
         row.appendChild(addBtn);
         els.assignClassResults.appendChild(row);
       });
+
+      if (filtered.length > assignLimit) {
+        const moreBtn = document.createElement('button');
+        moreBtn.type = 'button';
+        moreBtn.className = 'w-full py-1.5 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition';
+        moreBtn.textContent = `แสดงเพิ่มอีก ${Math.min(PAGE_SIZE, filtered.length - assignLimit)} รายการ (จาก ${filtered.length})`;
+        moreBtn.addEventListener('click', () => {
+          assignLimit += PAGE_SIZE;
+          renderAssignClassSearchResults();
+        });
+        els.assignClassResults.appendChild(moreBtn);
+      }
     }
 
     function renderConfidenceBars(confidences = {}) {
@@ -533,10 +722,10 @@
         const row = document.createElement('div');
         row.className = 'space-y-1';
         row.innerHTML = `
-          <div class="flex justify-between text-xs">
-            <span class="font-medium text-slate-700 truncate pr-2">
+          <div class="flex justify-between text-xs gap-2">
+            <span class="font-medium text-slate-700 truncate">
               <span class="text-[11px] font-bold text-slate-400 mr-1">#${rankIndex + 1}</span>
-              ${escapeHtml(cls.name)}
+              ${escapeHtml(cls.name)} <span class="text-[11px] text-emerald-700 font-semibold">(${formatBaht(cls.basePrice)})</span>
             </span>
             <span class="font-semibold text-slate-900 shrink-0">${pct}%</span>
           </div>
@@ -548,13 +737,27 @@
       });
     }
 
+    function refreshSingleClassSummary(cls) {
+      const card = els.classesContainer.querySelector(`[data-class-card="${cls.id}"]`);
+      if (!card) return;
+      const priceBadge = card.querySelector('[data-badge-price]');
+      const countBadge = card.querySelector('[data-badge-count]');
+      const countDetail = card.querySelector('[data-detail-count]');
+      if (priceBadge) priceBadge.textContent = formatBaht(cls.basePrice);
+      if (countBadge) countBadge.textContent = `${cls.embeddings.length} ตัวอย่าง`;
+      if (countDetail) countDetail.textContent = `มีฟีเจอร์แล้ว ${cls.embeddings.length} ตัวอย่าง`;
+    }
+
     function renderClasses() {
       els.classTotalCount.textContent = String(classes.length);
       const filterText = (els.classFilterInput.value || '').trim().toLowerCase();
       els.clearClassFilterBtn.classList.toggle('hidden', filterText.length === 0);
 
       const visibleClasses = filterText
-        ? classes.filter((c) => c.name.toLowerCase().includes(filterText))
+        ? classes.filter((c) =>
+            c.name.toLowerCase().includes(filterText) ||
+            String(c.basePrice || 0).includes(filterText)
+          )
         : classes;
 
       els.classesContainer.innerHTML = '';
@@ -562,7 +765,7 @@
       if (!visibleClasses.length) {
         els.classesContainer.innerHTML = `
           <div class="text-xs text-slate-400 text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-            ไม่พบกลุ่มที่ตรงกับ "${escapeHtml(els.classFilterInput.value)}"
+            ไม่พบสินค้าที่ตรงกับ "${escapeHtml(els.classFilterInput.value)}"
           </div>
         `;
         renderAssignClassSearchResults();
@@ -570,36 +773,29 @@
         return;
       }
 
-      visibleClasses.forEach((cls) => {
+      const sliceClasses = visibleClasses.slice(0, classesLimit);
+
+      sliceClasses.forEach((cls) => {
         const realIndex = classes.findIndex((c) => c.id === cls.id);
         const isCollapsed = Boolean(cls.collapsed);
 
         const card = document.createElement('div');
+        card.setAttribute('data-class-card', cls.id);
         card.className = 'bg-slate-50/80 border border-slate-200 rounded-xl p-3 space-y-2.5';
-
-        const thumbsHtml = cls.samples.length
-          ? cls.samples.map((s, sIdx) => `
-              <div class="relative shrink-0 w-12 h-12 rounded-lg overflow-hidden border border-slate-200 bg-white">
-                <img src="${s.dataUrl}" alt="ตัวอย่าง" class="w-full h-full object-cover" />
-                <button type="button" data-del-sample="${sIdx}" data-class-id="${cls.id}"
-                  aria-label="ลบรูป"
-                  class="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-slate-900/75 text-white text-[10px] leading-none flex items-center justify-center">
-                  ×
-                </button>
-              </div>
-            `).join('')
-          : `<div class="text-[11px] text-slate-400 py-1.5">ยังไม่มีภาพตัวอย่างในกลุ่มนี้</div>`;
 
         card.innerHTML = `
           <div class="flex items-center gap-1.5">
-            <button type="button" data-toggle-card="${cls.id}" aria-label="ย่อหรือขยายกลุ่ม"
+            <button type="button" data-toggle-card="${cls.id}" aria-label="ย่อหรือขยายสินค้า"
               class="shrink-0 w-7 h-8 rounded-lg bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 text-xs font-bold flex items-center justify-center transition">
               ${isCollapsed ? '+' : '−'}
             </button>
-            <input type="text" value="${escapeHtml(cls.name)}" data-rename-id="${cls.id}"
+            <input type="text" value="${escapeHtml(cls.name)}" data-rename-id="${cls.id}" placeholder="ชื่อสินค้า"
               class="flex-1 min-w-0 text-xs sm:text-sm font-semibold text-slate-900 bg-white focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-lg px-2.5 py-1.5 outline-none transition" />
-            <span class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-white text-slate-700 border border-slate-200 shrink-0">
-              ${cls.samples.length} ภาพ
+            <span data-badge-price class="text-[11px] font-bold px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+              ${formatBaht(cls.basePrice)}
+            </span>
+            <span data-badge-count class="text-[11px] font-semibold px-2 py-1 rounded-lg bg-white text-slate-600 border border-slate-200 shrink-0">
+              ${cls.embeddings.length} ตัวอย่าง
             </span>
             ${classes.length > 2 ? `
               <button type="button" data-delete-class="${cls.id}"
@@ -609,37 +805,64 @@
             ` : ''}
           </div>
 
-          <div data-card-body="${cls.id}" class="${isCollapsed ? 'hidden' : 'space-y-2 pt-1 border-t border-slate-200/70'}">
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-[11px] text-slate-500 truncate">อัปโหลดเพิ่มหรือดูรูปในกลุ่ม:</span>
-              <label class="cursor-pointer shrink-0">
-                <input type="file" accept="image/*" multiple data-upload-class="${cls.id}" class="hidden" />
-                <div class="text-center py-1.5 px-2.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-semibold transition">
-                  อัปโหลดรูปภาพ
-                </div>
-              </label>
+          <div data-card-body="${cls.id}" class="${isCollapsed ? 'hidden' : 'space-y-2.5 pt-2 border-t border-slate-200/70'}">
+            <div class="flex items-center justify-between gap-2 text-xs">
+              <label class="font-medium text-slate-700">ราคาสินค้า (บาท):</label>
+              <input type="number" min="0" step="any" value="${Number(cls.basePrice ?? 0)}" data-price-id="${cls.id}"
+                class="w-28 text-right font-semibold text-slate-900 bg-white border border-slate-200 focus:border-indigo-500 rounded-lg px-2.5 py-1 outline-none" />
             </div>
 
-            <div class="thumb-strip flex items-center gap-1.5 overflow-x-auto pb-0.5">
-              ${thumbsHtml}
+            <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-200/60">
+              <span data-detail-count class="text-[11px] text-slate-500 truncate">มีฟีเจอร์แล้ว ${cls.embeddings.length} ตัวอย่าง</span>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button type="button" data-clear-samples="${cls.id}"
+                  class="py-1.5 px-2 rounded-lg bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 text-[11px] font-medium transition">
+                  ล้างฟีเจอร์
+                </button>
+                <label class="cursor-pointer">
+                  <input type="file" accept="image/*" multiple data-upload-class="${cls.id}" class="hidden" />
+                  <div class="text-center py-1.5 px-2.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[11px] font-semibold transition">
+                    อัปโหลดรูปเพิ่ม
+                  </div>
+                </label>
+              </div>
             </div>
           </div>
         `;
 
         els.classesContainer.appendChild(card);
 
-        const toggleBtn = card.querySelector(`[data-toggle-card="${cls.id}"]`);
-        toggleBtn.addEventListener('click', () => {
+        card.querySelector(`[data-toggle-card="${cls.id}"]`).addEventListener('click', () => {
           cls.collapsed = !cls.collapsed;
-          renderClasses();
+          const body = card.querySelector(`[data-card-body="${cls.id}"]`);
+          const btn = card.querySelector(`[data-toggle-card="${cls.id}"]`);
+          if (body) body.classList.toggle('hidden', cls.collapsed);
+          if (btn) btn.textContent = cls.collapsed ? '+' : '−';
         });
 
-        const nameInput = card.querySelector(`[data-rename-id="${cls.id}"]`);
-        nameInput.addEventListener('input', (e) => {
-          cls.name = e.target.value.trim() || `กลุ่มที่ ${(realIndex >= 0 ? realIndex : 0) + 1}`;
-          renderConfidenceBars();
+        card.querySelector(`[data-rename-id="${cls.id}"]`).addEventListener('input', (e) => {
+          cls.name = e.target.value.trim() || `สินค้าที่ ${(realIndex >= 0 ? realIndex : 0) + 1}`;
+          syncLatestPredictionPrice();
           renderAssignClassSearchResults();
         });
+
+        card.querySelector(`[data-price-id="${cls.id}"]`).addEventListener('input', (e) => {
+          cls.basePrice = Math.max(0, Number(e.target.value) || 0);
+          refreshSingleClassSummary(cls);
+          syncLatestPredictionPrice();
+          renderAssignClassSearchResults();
+        });
+
+        const clearSamplesBtn = card.querySelector(`[data-clear-samples="${cls.id}"]`);
+        if (clearSamplesBtn) {
+          clearSamplesBtn.addEventListener('click', () => {
+            cls.embeddings = [];
+            refreshSingleClassSummary(cls);
+            renderAssignClassSearchResults();
+            updateTrainButton();
+            setStatus(`ล้างฟีเจอร์ทั้งหมดของ "${cls.name}" แล้ว`);
+          });
+        }
 
         const delClassBtn = card.querySelector(`[data-delete-class="${cls.id}"]`);
         if (delClassBtn) {
@@ -649,7 +872,6 @@
             stopLivePrediction();
             renderClasses();
             renderConfidenceBars();
-            renderAssignClassSearchResults();
             updateBadge();
             updateTrainButton();
           });
@@ -664,29 +886,34 @@
             return;
           }
           for (const file of files) {
-            await addImageFileToClass(cls, file);
+            await addImageFileEmbeddingToClass(cls, file);
           }
           uploadInput.value = '';
-          renderClasses();
+          refreshSingleClassSummary(cls);
+          renderAssignClassSearchResults();
           updateTrainButton();
-        });
-
-        card.querySelectorAll(`[data-del-sample][data-class-id="${cls.id}"]`).forEach((btn) => {
-          btn.addEventListener('click', () => {
-            const idx = Number(btn.getAttribute('data-del-sample'));
-            cls.samples.splice(idx, 1);
-            renderClasses();
-            updateTrainButton();
-          });
+          setStatus(`เพิ่มฟีเจอร์จาก ${files.length} รูปเข้า "${cls.name}" แล้ว`);
         });
       });
+
+      if (visibleClasses.length > classesLimit) {
+        const moreBtn = document.createElement('button');
+        moreBtn.type = 'button';
+        moreBtn.className = 'w-full py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition';
+        moreBtn.textContent = `แสดงสินค้าเพิ่มอีก ${Math.min(PAGE_SIZE, visibleClasses.length - classesLimit)} รายการ (จาก ${visibleClasses.length})`;
+        moreBtn.addEventListener('click', () => {
+          classesLimit += PAGE_SIZE;
+          renderClasses();
+        });
+        els.classesContainer.appendChild(moreBtn);
+      }
 
       renderAssignClassSearchResults();
       updateTrainButton();
     }
 
     function updateTrainButton() {
-      const classesWithData = classes.filter((c) => c.samples.length > 0).length;
+      const classesWithData = classes.filter((c) => c.embeddings.length > 0).length;
       els.trainBtn.disabled = !(isModelReady && classesWithData >= 2);
     }
 
@@ -707,7 +934,7 @@
         els.cameraPlaceholder.classList.add('hidden');
         els.toggleCameraBtn.textContent = 'ปิดกล้อง';
         setStatus(`เปิดกล้อง${facingMode === 'user' ? 'หน้า' : 'หลัง'}พร้อมใช้งานแล้ว`);
-        if (isTrained) {
+        if (isPredicting) {
           startLivePrediction();
         }
       } catch (err) {
@@ -732,24 +959,6 @@
       els.toggleCameraBtn.textContent = 'เปิด/ปิดกล้อง';
     }
 
-    function captureDataUrlFromVideo(maxSize = 140) {
-      const vw = els.webcam.videoWidth || 640;
-      const vh = els.webcam.videoHeight || 480;
-      const scale = Math.min(maxSize / vw, maxSize / vh, 1);
-      const cw = Math.max(1, Math.round(vw * scale));
-      const ch = Math.max(1, Math.round(vh * scale));
-
-      els.captureCanvas.width = cw;
-      els.captureCanvas.height = ch;
-      const ctx = els.captureCanvas.getContext('2d');
-      if (facingMode === 'user') {
-        ctx.translate(cw, 0);
-        ctx.scale(-1, 1);
-      }
-      ctx.drawImage(els.webcam, 0, 0, cw, ch);
-      return els.captureCanvas.toDataURL('image/jpeg', 0.7);
-    }
-
     function extractEmbeddingFromElement(imgEl) {
       return tf.tidy(() => {
         const activation = mobilenetModel.infer(imgEl, true);
@@ -759,39 +968,63 @@
       });
     }
 
-    function capturePhotoToTray() {
+    function captureEmbeddingToQueue() {
       if (!isModelReady) {
         setStatus('รอโมเดล MobileNet โหลดเสร็จก่อนครับ', true);
         return;
       }
       if (!stream || !els.webcam.videoWidth) {
-        setStatus('กรุณากด "เปิด/ปิดกล้อง" ก่อนถ่ายภาพครับ', true);
+        setStatus('กรุณากด "เปิด/ปิดกล้อง" ก่อนเก็บฟีเจอร์ครับ', true);
         return;
       }
-      const dataUrl = captureDataUrlFromVideo(140);
       const emb = extractEmbeddingFromElement(els.webcam);
-      capturedQueue.push({ dataUrl, embedding: emb });
-      renderCapturedTray();
-      setStatus(`ถ่ายภาพแล้ว (${capturedQueue.length} รูปในถาดรอจัดกลุ่ม)`);
+      queuedEmbeddings.push(emb);
+      updateQueueCountOnly();
+      setStatus(`เก็บฟีเจอร์แล้ว (${queuedEmbeddings.length} ตัวอย่างรอลงกลุ่ม)`);
     }
 
-    function addImageFileToClass(cls, file) {
+    async function predictFromSourceElement(sourceEl, isFromFile = false) {
+      if (!isModelReady) {
+        setStatus('รอโมเดล MobileNet โหลดเสร็จก่อนครับ', true);
+        return null;
+      }
+      if (!isTrained || !classifier || classifier.getNumClasses() < 2) {
+        setStatus('กรุณาฝึกสอนหรือโหลดโมเดลก่อนทำนายครับ', true);
+        return null;
+      }
+
+      const activation = mobilenetModel.infer(sourceEl, true);
+      const result = await classifier.predictClass(activation, 5);
+      activation.dispose();
+
+      applyPredictionResult(result, isFromFile);
+      return result;
+    }
+
+    async function runSnapshotPrediction() {
+      if (!stream || !els.webcam.videoWidth) {
+        setStatus('กรุณากด "เปิด/ปิดกล้อง" ก่อนถ่ายภาพนิ่งครับ', true);
+        return;
+      }
+      const res = await predictFromSourceElement(els.webcam, false);
+      if (res && latestPrediction) {
+        const pct = Math.round(latestPrediction.confidence * 100);
+        if (latestPrediction.isConfident) {
+          setStatus(`ถ่ายนิ่งแล้ว: ${latestPrediction.name} (${formatBaht(latestPrediction.price)} • ${pct}%)`);
+        } else {
+          setStatus(`ความมั่นใจ ${pct}% (ต่ำกว่าเกณฑ์ ${Math.round(confidenceThreshold * 100)}%) ลองจัดมุมใหม่ครับ`, true);
+        }
+      }
+    }
+
+    function addImageFileEmbeddingToClass(cls, file) {
       return new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = (ev) => {
           const img = new Image();
           img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const maxSize = 140;
-            const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
-            canvas.width = Math.max(1, Math.round(img.width * scale));
-            canvas.height = Math.max(1, Math.round(img.height * scale));
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
-
             const emb = extractEmbeddingFromElement(img);
-            cls.samples.push({ dataUrl, embedding: emb });
+            cls.embeddings.push(emb);
             resolve();
           };
           img.src = ev.target.result;
@@ -808,9 +1041,10 @@
 
       let added = 0;
       classes.forEach((cls) => {
-        cls.samples.forEach((s) => {
-          if (s.embedding && Array.isArray(s.embedding.data) && Array.isArray(s.embedding.shape)) {
-            const tensor = tf.tensor(s.embedding.data, s.embedding.shape);
+        const list = Array.isArray(cls.embeddings) ? cls.embeddings : [];
+        list.forEach((emb) => {
+          if (emb && Array.isArray(emb.data) && Array.isArray(emb.shape)) {
+            const tensor = tf.tensor(emb.data, emb.shape);
             classifier.addExample(tensor, cls.id);
             tensor.dispose();
             added += 1;
@@ -823,26 +1057,25 @@
     async function trainModel() {
       const total = rebuildKnnFromClasses();
       if (total < 2) {
-        setStatus('ต้องมีภาพตัวอย่างอย่างน้อย 2 ภาพในอย่างน้อย 2 กลุ่มก่อนฝึกสอนครับ', true);
+        setStatus('ต้องมีฟีเจอร์ตัวอย่างอย่างน้อย 2 ตัวอย่างในอย่างน้อย 2 กลุ่มก่อนฝึกสอนครับ', true);
         return false;
       }
       isTrained = true;
       updateBadge();
       renderConfidenceBars();
-      setStatus(`ฝึกสอนโมเดลเสร็จสมบูรณ์ (${total} ตัวอย่าง) พร้อมทำนายผลแล้ว!`);
-
-      if (stream) {
-        startLivePrediction();
-      }
+      setStatus(`ฝึกสอนโมเดลเสร็จสมบูรณ์ (${total} ตัวอย่าง) พร้อมทำนายแล้ว!`);
       return true;
     }
 
     function startLivePrediction() {
       stopLivePrediction();
-      if (!isTrained || !stream || !classifier || classifier.getNumClasses() < 2) return;
+      if (!isTrained || !stream || !classifier || classifier.getNumClasses() < 2) {
+        setStatus('ต้องเทรนหรือโหลดโมเดลและเปิดกล้องก่อนเริ่มทำนายสดครับ', true);
+        return;
+      }
       isPredicting = true;
-      els.predictionBanner.classList.remove('hidden');
-      els.stopPredictBtn.classList.remove('hidden');
+      els.toggleLivePredictBtn.textContent = 'หยุดทำนายสด';
+      els.toggleLivePredictBtn.className = 'text-xs font-semibold py-2.5 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition';
 
       predictTimer = setInterval(async () => {
         if (!isPredicting || !stream || els.webcam.readyState < 2) return;
@@ -850,9 +1083,9 @@
           const activation = mobilenetModel.infer(els.webcam, true);
           const result = await classifier.predictClass(activation, 5);
           activation.dispose();
-          applyPredictionResult(result);
+          applyPredictionResult(result, false);
         } catch (err) {}
-      }, 220);
+      }, 450);
     }
 
     function stopLivePrediction() {
@@ -862,19 +1095,36 @@
         predictTimer = null;
       }
       els.predictionBanner.classList.add('hidden');
-      els.stopPredictBtn.classList.add('hidden');
+      els.toggleLivePredictBtn.textContent = 'เริ่มทำนายสด';
+      els.toggleLivePredictBtn.className = 'text-xs font-semibold py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition';
     }
 
-    function applyPredictionResult(result) {
+    function applyPredictionResult(result, isFromFile = false) {
       if (!result || !result.confidences) return;
       renderConfidenceBars(result.confidences);
 
       const bestId = result.label;
       const bestCls = classes.find((c) => c.id === bestId);
-      const bestPct = Math.round(((result.confidences && result.confidences[bestId]) || 0) * 100);
+      const bestScore = Number((result.confidences && result.confidences[bestId]) || 0);
+      const price = bestCls ? Math.max(0, Number(bestCls.basePrice) || 0) : 0;
 
-      els.topLabel.textContent = bestCls ? bestCls.name : bestId;
-      els.topConfidence.textContent = `${bestPct}%`;
+      latestPrediction = {
+        classId: bestId,
+        name: bestCls ? bestCls.name : bestId,
+        price,
+        confidence: bestScore,
+        isConfident: bestScore >= confidenceThreshold
+      };
+
+      renderLatestPredictionUI();
+
+      if (isFromFile) {
+        els.testImagePreviewBox.classList.remove('hidden');
+        const pct = Math.round(bestScore * 100);
+        els.testImageResult.textContent = latestPrediction.isConfident
+          ? `${latestPrediction.name} • ${formatBaht(latestPrediction.price)} (${pct}%)`
+          : `ไม่แน่ใจ (${latestPrediction.name} ${pct}%)`;
+      }
     }
 
     async function predictSingleImage(file) {
@@ -891,34 +1141,24 @@
       reader.onload = (ev) => {
         const img = new Image();
         img.onload = async () => {
-          els.testImagePreview.src = ev.target.result;
-          els.testImagePreviewBox.classList.remove('hidden');
-
-          const activation = mobilenetModel.infer(img, true);
-          const result = await classifier.predictClass(activation, 5);
-          activation.dispose();
-
-          applyPredictionResult(result);
-          const bestCls = classes.find((c) => c.id === result.label);
-          const pct = Math.round(((result.confidences && result.confidences[result.label]) || 0) * 100);
-          els.testImageResult.textContent = `${bestCls ? bestCls.name : result.label} (${pct}%)`;
+          await predictFromSourceElement(img, true);
         };
         img.src = ev.target.result;
       };
       reader.readAsDataURL(file);
     }
 
-    function buildSerializablePayload() {
+    // Export / Save strictly without thumbnail images
+    function buildLitePayload() {
       return {
-        version: 2,
+        version: 5,
+        noThumbnails: true,
         savedAt: new Date().toISOString(),
         classes: classes.map((c) => ({
           id: c.id,
           name: c.name,
-          samples: c.samples.map((s) => ({
-            dataUrl: s.dataUrl,
-            embedding: s.embedding
-          }))
+          basePrice: Math.max(0, Number(c.basePrice) || 0),
+          embeddings: Array.isArray(c.embeddings) ? c.embeddings : []
         }))
       };
     }
@@ -927,25 +1167,36 @@
       if (!payload || !Array.isArray(payload.classes) || payload.classes.length < 2) {
         throw new Error('รูปแบบข้อมูลโมเดลไม่ถูกต้อง');
       }
-      classes = payload.classes.map((c, idx) => ({
-        id: c.id || `class_loaded_${idx}_${Date.now()}`,
-        name: c.name || `กลุ่มที่ ${idx + 1}`,
-        samples: Array.isArray(c.samples) ? c.samples : [],
-        collapsed: classes.length > 4
-      }));
+      classes = payload.classes.map((c, idx) => {
+        // Support both new `embeddings` and older `samples` format while dropping thumbnails
+        const rawEmbs = Array.isArray(c.embeddings)
+          ? c.embeddings
+          : Array.isArray(c.samples)
+            ? c.samples.map((s) => s && s.embedding).filter(Boolean)
+            : [];
+        return {
+          id: c.id || `class_loaded_${idx}_${Date.now()}`,
+          name: c.name || `สินค้าที่ ${idx + 1}`,
+          basePrice: Math.max(0, Number(c.basePrice ?? c.price ?? 0) || 0),
+          embeddings: rawEmbs,
+          collapsed: true
+        };
+      });
       classCounter = Math.max(classCounter, classes.length);
+      classesLimit = PAGE_SIZE;
+      assignLimit = PAGE_SIZE;
       renderClasses();
+
       const added = rebuildKnnFromClasses();
       if (added >= 2) {
         isTrained = true;
         updateBadge();
         renderConfidenceBars();
-        setStatus(`โหลดโมเดลสำเร็จ (${added} ตัวอย่าง) พร้อมใช้งานแล้ว`);
-        if (stream) startLivePrediction();
+        setStatus(`โหลดโมเดลสำเร็จ (${added} ตัวอย่าง • ไม่เก็บรูปย่อ) พร้อมใช้งานแล้ว`);
       } else {
         isTrained = false;
         updateBadge();
-        setStatus('โหลดรายชื่อกลุ่มสำเร็จ แต่ยังไม่มีภาพตัวอย่างเพียงพอ');
+        setStatus('โหลดรายชื่อสินค้าและราคาสำเร็จ แต่ยังไม่มีฟีเจอร์เพียงพอ');
       }
     }
 
@@ -976,11 +1227,11 @@
 
     async function saveToBrowser(silent = false) {
       try {
-        const payload = buildSerializablePayload();
+        const payload = buildLitePayload();
         await dbPutModel(payload);
         await refreshStorageInfo();
         if (!silent) {
-          setStatus('บันทึกภาพและโมเดลลงในเบราว์เซอร์ (IndexedDB) เรียบร้อยแล้ว');
+          setStatus('บันทึกข้อมูลสินค้า ราคา และฟีเจอร์ลงเบราว์เซอร์แล้ว (ไม่เก็บรูปย่อ)');
         }
         return true;
       } catch (err) {
@@ -1007,18 +1258,18 @@
     }
 
     function exportToJsonFile() {
-      const payload = buildSerializablePayload();
+      const payload = buildLitePayload();
       const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
       a.href = url;
-      a.download = `teachable-model-${stamp}.json`;
+      a.download = `retail-model-lite-${stamp}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      setStatus('ดาวน์โหลดไฟล์โมเดล (.json) เรียบร้อยแล้ว');
+      setStatus('ดาวน์โหลดไฟล์ .json (โหมดไม่เก็บรูปย่อ) เรียบร้อยแล้ว');
     }
 
     async function refreshStorageInfo() {
@@ -1028,12 +1279,15 @@
           els.storageInfo.textContent = 'ยังไม่มีข้อมูลที่บันทึกในเบราว์เซอร์ (IndexedDB)';
           return;
         }
-        const totalSamples = (record.classes || []).reduce((sum, c) => sum + ((c.samples && c.samples.length) || 0), 0);
+        const totalSamples = (record.classes || []).reduce(
+          (sum, c) => sum + ((c.embeddings && c.embeddings.length) || (c.samples && c.samples.length) || 0),
+          0
+        );
         const approxBytes = new Blob([JSON.stringify(record)]).size;
         const sizeLabel = approxBytes >= 1024 * 1024
           ? `${(approxBytes / (1024 * 1024)).toFixed(2)} MB`
           : `${(approxBytes / 1024).toFixed(1)} KB`;
-        els.storageInfo.textContent = `บันทึกแล้ว (${totalSamples} ภาพ • ${sizeLabel})`;
+        els.storageInfo.textContent = `บันทึกแล้ว (${classes.length} สินค้า • ${totalSamples} ตัวอย่าง • ${sizeLabel})`;
       } catch (err) {
         els.storageInfo.textContent = 'ไม่สามารถตรวจสอบพื้นที่จัดเก็บได้';
       }
@@ -1058,17 +1312,21 @@
         }
       });
 
+      els.snapshotPredictBtn.addEventListener('click', () => {
+        runSnapshotPrediction();
+      });
+
       els.snapPhotoBtn.addEventListener('click', () => {
-        capturePhotoToTray();
+        captureEmbeddingToQueue();
       });
 
       const startHoldSnap = (e) => {
         e.preventDefault();
         if (!isModelReady) return setStatus('รอโมเดล MobileNet โหลดเสร็จก่อนครับ', true);
-        if (!stream) return setStatus('กรุณากด "เปิด/ปิดกล้อง" ก่อนถ่ายภาพครับ', true);
-        capturePhotoToTray();
+        if (!stream) return setStatus('กรุณากด "เปิด/ปิดกล้อง" ก่อนเก็บฟีเจอร์ครับ', true);
+        captureEmbeddingToQueue();
         clearInterval(holdInterval);
-        holdInterval = setInterval(() => capturePhotoToTray(), 200);
+        holdInterval = setInterval(() => captureEmbeddingToQueue(), 250);
       };
       const stopHoldSnap = () => {
         if (holdInterval) {
@@ -1082,28 +1340,51 @@
       els.holdSnapBtn.addEventListener('pointerleave', stopHoldSnap);
       els.holdSnapBtn.addEventListener('pointercancel', stopHoldSnap);
 
+      els.thresholdRange.addEventListener('input', (e) => {
+        confidenceThreshold = Number(e.target.value) / 100;
+        els.thresholdLabel.textContent = `${e.target.value}%`;
+        if (latestPrediction) {
+          latestPrediction.isConfident = latestPrediction.confidence >= confidenceThreshold;
+          renderLatestPredictionUI();
+        }
+      });
+
+      els.addPredictedToCartBtn.addEventListener('click', () => {
+        addLatestPredictionToCart();
+      });
+
+      els.clearCartBtn.addEventListener('click', () => {
+        cartItems = [];
+        renderCart();
+        setStatus('ล้างรายการในบิลแล้ว');
+      });
+
       els.clearCapturedBtn.addEventListener('click', () => {
-        capturedQueue = [];
-        renderCapturedTray();
-        setStatus('ล้างรูปที่ถ่ายในถาดเรียบร้อยแล้ว');
+        queuedEmbeddings = [];
+        updateQueueCountOnly();
+        setStatus('ล้างฟีเจอร์ที่เก็บไว้เรียบร้อยแล้ว');
       });
 
       els.assignSearchInput.addEventListener('input', () => {
+        assignLimit = PAGE_SIZE;
         renderAssignClassSearchResults();
       });
 
       els.clearAssignSearchBtn.addEventListener('click', () => {
         els.assignSearchInput.value = '';
+        assignLimit = PAGE_SIZE;
         renderAssignClassSearchResults();
         els.assignSearchInput.focus();
       });
 
       els.classFilterInput.addEventListener('input', () => {
+        classesLimit = PAGE_SIZE;
         renderClasses();
       });
 
       els.clearClassFilterBtn.addEventListener('click', () => {
         els.classFilterInput.value = '';
+        classesLimit = PAGE_SIZE;
         renderClasses();
         els.classFilterInput.focus();
       });
@@ -1116,9 +1397,13 @@
         renderClasses();
       });
 
-      els.stopPredictBtn.addEventListener('click', () => {
-        stopLivePrediction();
-        setStatus('หยุดการทำนายแบบเรียลไทม์แล้ว');
+      els.toggleLivePredictBtn.addEventListener('click', () => {
+        if (isPredicting) {
+          stopLivePrediction();
+          setStatus('หยุดการทำนายสดแล้ว');
+        } else {
+          startLivePrediction();
+        }
       });
 
       els.testImageInput.addEventListener('change', (e) => {
@@ -1130,7 +1415,8 @@
       });
 
       els.addClassBtn.addEventListener('click', () => {
-        classes.push(createClassItem());
+        const item = createClassItem();
+        classes.unshift(item);
         renderClasses();
         renderConfidenceBars();
       });
@@ -1199,11 +1485,15 @@
     }
 
     async function init() {
-      classes = [createClassItem('กลุ่มที่ 1'), createClassItem('กลุ่มที่ 2')];
+      classes = [
+        createClassItem('สินค้าที่ 1', 20),
+        createClassItem('สินค้าที่ 2', 35)
+      ];
       bindGlobalEvents();
       renderClasses();
-      renderCapturedTray();
+      updateQueueCountOnly();
       renderConfidenceBars();
+      renderCart();
       updateBadge();
 
       const activeUrl = getActiveModelUrl();
@@ -1236,9 +1526,9 @@
         }
 
         if (restoredFromLocal && isTrained) {
-          setStatus('กู้คืนภาพและโมเดลที่บันทึกไว้เรียบร้อย พร้อมใช้งานแล้ว!');
+          setStatus('กู้คืนข้อมูลสินค้า ราคา และฟีเจอร์เรียบร้อย พร้อมใช้งานแล้ว!');
         } else {
-          setStatus('พร้อมใช้งาน! เปิดกล้องหรืออัปโหลดภาพเพื่อเริ่มเก็บข้อมูลได้เลย');
+          setStatus('พร้อมใช้งาน! เปิดกล้องหรืออัปโหลดภาพเพื่อเริ่มเก็บฟีเจอร์ได้เลย');
         }
       } catch (err) {
         setStatus('โหลดโมเดล TensorFlow.js / MobileNet ไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต', true);
